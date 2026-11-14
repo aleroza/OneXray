@@ -104,7 +104,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         try await setTunnelNetworkSettings(settings)
         try lifecycle.check(generation)
         if let coreInvokeText = request.coreInvokeText {
-            try await startXray(coreInvokeText, generation: generation)
+            try await startXray(coreInvokeText, generation: generation, needsTunnelFd: request.tunnelEnabled != false)
         }
         YGLog("startTunnel finished")
     }
@@ -163,11 +163,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         try lifecycle.check(generation)
 
         if let coreInvokeText = request.coreInvokeText {
-            try await startXray(coreInvokeText, generation: generation)
+            try await startXray(coreInvokeText, generation: generation, needsTunnelFd: request.tunnelEnabled != false)
         }
     }
 
+    // A local proxy session keeps the tunnel up without capturing traffic.
+    private func localProxySettings() -> NEPacketTunnelNetworkSettings {
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: ProxyHost)
+        settings.mtu = TunMtu
+        let local = NEIPv4Settings(addresses: ["198.18.0.1"], subnetMasks: ["255.254.0.0"])
+        local.includedRoutes = []
+        settings.ipv4Settings = local
+        return settings
+    }
+
     private func buildSettings(request: StartVpnRequest) throws -> NEPacketTunnelNetworkSettings {
+        if request.tunnelEnabled == false { return localProxySettings() }
+        guard let tun = request.tun else { return localProxySettings() }
         let ipv4 = NEIPv4Settings(addresses: ["198.18.0.1"], subnetMasks: ["255.254.0.0"])
         ipv4.includedRoutes = [NEIPv4Route.default()]
 
@@ -175,44 +187,42 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         settings.ipv4Settings = ipv4
         settings.mtu = TunMtu
         var servers: [String] = []
-        if let tun = request.tun {
-            if let tunDnsIPv4 = tun.tunDnsIPv4 {
-                servers.append(tunDnsIPv4)
+        if let tunDnsIPv4 = tun.tunDnsIPv4 {
+            servers.append(tunDnsIPv4)
+        }
+        if let enableIPv6 = tun.enableIPv6, enableIPv6 {
+            let ipv6 = NEIPv6Settings(addresses: ["fc00::1"], networkPrefixLengths: [64])
+            ipv6.includedRoutes = [NEIPv6Route.default()]
+            settings.ipv6Settings = ipv6
+            if let tunDnsIPv6 = tun.tunDnsIPv6 {
+                servers.append(tunDnsIPv6)
             }
-            if let enableIPv6 = tun.enableIPv6, enableIPv6 {
-                let ipv6 = NEIPv6Settings(addresses: ["fc00::1"], networkPrefixLengths: [64])
-                ipv6.includedRoutes = [NEIPv6Route.default()]
-                settings.ipv6Settings = ipv6
-                if let tunDnsIPv6 = tun.tunDnsIPv6 {
-                    servers.append(tunDnsIPv6)
-                }
-            }
+        }
 
-            if let enableDot = tun.enableDot, enableDot {
-                let dnsSettings = NEDNSOverTLSSettings(servers: servers)
-                if let serverName = tun.dnsServerName {
-                    dnsSettings.serverName = serverName
-                }
-                settings.dnsSettings = dnsSettings
-            } else {
-                settings.dnsSettings = NEDNSSettings(servers: servers)
+        if let enableDot = tun.enableDot, enableDot {
+            let dnsSettings = NEDNSOverTLSSettings(servers: servers)
+            if let serverName = tun.dnsServerName {
+                dnsSettings.serverName = serverName
             }
-            if tun.includeAllNetworks != true {
-                var excludedRoutes = tun.excludedRoutes ?? []
-                #if os(iOS)
-                // Keep the default routes; these exceptions affect iOS's VPN badge.
-                // They are runtime-only and never alter the user's exclusion list.
-                if tun.hideVpnIcon == true {
-                    if !excludedRoutes.contains("0.0.0.0/31") {
-                        excludedRoutes.append("0.0.0.0/31")
-                    }
-                    if tun.enableIPv6 == true, !excludedRoutes.contains("::/127") {
-                        excludedRoutes.append("::/127")
-                    }
+            settings.dnsSettings = dnsSettings
+        } else {
+            settings.dnsSettings = NEDNSSettings(servers: servers)
+        }
+        if tun.includeAllNetworks != true {
+            var excludedRoutes = tun.excludedRoutes ?? []
+            #if os(iOS)
+            // Keep the default routes; these exceptions affect iOS's VPN badge.
+            // They are runtime-only and never alter the user's exclusion list.
+            if tun.hideVpnIcon == true {
+                if !excludedRoutes.contains("0.0.0.0/31") {
+                    excludedRoutes.append("0.0.0.0/31")
                 }
-                #endif
-                try applyExcludedRoutes(excludedRoutes, to: settings)
+                if tun.enableIPv6 == true, !excludedRoutes.contains("::/127") {
+                    excludedRoutes.append("::/127")
+                }
             }
+            #endif
+            try applyExcludedRoutes(excludedRoutes, to: settings)
         }
         return settings
     }
@@ -393,11 +403,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
     // MARK: - Xray lifecycle
 
-    private func startXray(_ requestJson: String, generation: UInt64) async throws {
+    private func startXray(
+        _ requestJson: String,
+        generation: UInt64,
+        needsTunnelFd: Bool = true
+    ) async throws {
         try lifecycle.check(generation)
-        guard let fd = self.tunnelFileDescriptor else {
-            YGLog("PacketTunnelProvider TunnelError.noSocketFd")
-            throw TunnelError.noSocketFd
+        var fd: Int32?
+        if needsTunnelFd {
+            guard let descriptor = self.tunnelFileDescriptor else {
+                YGLog("PacketTunnelProvider TunnelError.noSocketFd")
+                throw TunnelError.noSocketFd
+            }
+            fd = descriptor
         }
         let request = try patchRuntimeEnv(
             fd: fd,
@@ -441,7 +459,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     }
 
     private func patchRuntimeEnv(
-        fd: Int32,
+        fd: Int32?,
         request: LibXrayInvokeRequest
     ) throws -> LibXrayInvokeRequest {
         guard let xrayJson = request.payload?.xrayJson, !xrayJson.isEmpty else {

@@ -205,6 +205,18 @@ final class RuntimeEnvTests: XCTestCase {
         XCTAssertThrowsError(try xrayRuntimeEnvWithTunFd(["invalid"], fd: 9))
         XCTAssertThrowsError(try xrayRuntimeEnvWithTunFd("invalid", fd: 9))
     }
+
+    func testLocalProxySessionKeepsTheEnvironmentWithoutADescriptor() throws {
+        let original: [String: Any] = [
+            "xray.location.asset": "/assets",
+            "xray.location.cert": "/certs",
+        ]
+        let updated = try xrayRuntimeEnvWithTunFd(original, fd: nil)
+        XCTAssertEqual(Set(updated.keys), Set(original.keys))
+        XCTAssertNil(updated["xray.tun.fd"])
+        let empty = try xrayRuntimeEnvWithTunFd(nil, fd: nil)
+        XCTAssertTrue(empty.isEmpty)
+    }
 }
 
 private final class RuntimeLifecycleEvents: @unchecked Sendable {

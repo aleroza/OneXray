@@ -97,7 +97,7 @@ private func xrayRuntimeLogFileType(_ url: URL) throws -> mode_t? {
 
 /// Preserve Core-owned environment entries while installing the platform FD.
 /// Resource paths for the System Extension are applied by its caller afterwards.
-func xrayRuntimeEnvWithTunFd(_ object: Any?, fd: Int32) throws -> [String: Any] {
+func xrayRuntimeEnvWithTunFd(_ object: Any?, fd: Int32?) throws -> [String: Any] {
     var env: [String: Any]
     if let object, !(object is NSNull) {
         guard let existing = object as? [String: Any] else {
@@ -107,6 +107,9 @@ func xrayRuntimeEnvWithTunFd(_ object: Any?, fd: Int32) throws -> [String: Any] 
     } else {
         env = [:]
     }
-    env["xray.tun.fd"] = "\(fd)"
+    // A local proxy session owns no tunnel descriptor.
+    if let fd {
+        env["xray.tun.fd"] = "\(fd)"
+    }
     return env
 }
