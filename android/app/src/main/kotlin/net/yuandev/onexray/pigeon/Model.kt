@@ -51,6 +51,8 @@ data class StartVpnRequest(
     val coreInvokeText: String?,
     val snapshotToken: String? = null,
     val metadataJson: String? = null,
+    // A local proxy session keeps the Core running without any system tunnel.
+    val tunnelEnabled: Boolean? = null,
 )
 
 @Serializable

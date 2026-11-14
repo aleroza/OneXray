@@ -302,6 +302,7 @@ class OneVpnService : VpnService() {
         }
         startGeneration.incrementAndGet()
         trafficMonitor.stop()
+        VpnController.clearLocalProxyMarker(this)
         updateWidget(VpnStatus.DISCONNECTING)
         XLog.d("OneVpnService: stopTun")
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -418,10 +419,21 @@ class OneVpnService : VpnService() {
             return
         }
         XLog.d("OneVpnService: runTun tunnel = null")
+        val coreInvokeText = requireNotNull(request.coreInvokeText) {
+            "missing Xray run request"
+        }
+        val tun = request.tun
+        if (request.tunnelEnabled == false) {
+            // Local proxy mode: no system tunnel captures traffic. The Core owns
+            // the SOCKS listener and its file descriptor stays unused.
+            XLog.d("OneVpnService: runTun local proxy mode")
+            runXray(coreInvokeText, null, generation, request.metricsPort)
+            return
+        }
+        val tunConfig = requireNotNull(tun) { "missing TUN config" }
         val builder = Builder()
-        val tun = requireNotNull(request.tun) { "missing TUN config" }
-        setPerAppVpn(tun, builder)
-        setIPAndDns(tun, builder)
+        setPerAppVpn(tunConfig, builder)
+        setIPAndDns(tunConfig, builder)
 
         val establishedTunnel = builder.establish()
             ?: throw IllegalStateException("failed to establish VPN tunnel")
@@ -433,11 +445,8 @@ class OneVpnService : VpnService() {
 
         XLog.d("OneVpnService: runTun tunnel = ${tunnel?.fd}")
 
-        val coreInvokeText = requireNotNull(request.coreInvokeText) {
-            "missing Xray run request"
-        }
         controller.attach(this)
-        configureDNS(tun)
+        configureDNS(tunConfig)
         runXray(coreInvokeText, establishedTunnel, generation, request.metricsPort)
     }
 
@@ -505,7 +514,7 @@ class OneVpnService : VpnService() {
 
     private fun runXray(
         coreInvokeText: String,
-        establishedTunnel: ParcelFileDescriptor,
+        establishedTunnel: ParcelFileDescriptor?,
         generation: Int,
         metricsPort: String?,
     ) {
@@ -515,7 +524,11 @@ class OneVpnService : VpnService() {
                 if (generation != startGeneration.get() || tunnel !== establishedTunnel) {
                     return@launch
                 }
-                val requestJson = patchRuntimeEnv(coreInvokeText, establishedTunnel.fd)
+                val requestJson = if (establishedTunnel == null) {
+                    coreInvokeText
+                } else {
+                    patchRuntimeEnv(coreInvokeText, establishedTunnel.fd)
+                }
                 val result = synchronized(coreLifecycleLock) {
                     if (generation != startGeneration.get() || tunnel !== establishedTunnel) {
                         return@launch
@@ -536,6 +549,10 @@ class OneVpnService : VpnService() {
                     if (generation != startGeneration.get() || tunnel !== establishedTunnel) return@withContext
                     XLog.d("OneVpnService: Xray started")
                     running = true
+                    if (establishedTunnel == null) {
+                        // Local proxy mode owns no VPN interface.
+                        VpnController.writeLocalProxyMarker(this@OneVpnService)
+                    }
                     sendStatusBroadcast(true)
                     try {
                         trafficMonitor.start(metricsPort)

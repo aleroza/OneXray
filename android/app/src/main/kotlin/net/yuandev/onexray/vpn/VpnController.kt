@@ -35,6 +35,7 @@ object VpnController {
     var lastError: String? = null
     private val lastStartRequestId = AtomicLong(0)
     private const val stopRequestRelativePath = "run/vpn.stop"
+    private const val localProxyRelativePath = "run/vpn.local-proxy"
     private val vpnAddresses by lazy {
         setOf(
             InetAddress.getByName(OneVpnService.IPV4_ADDRESS),
@@ -43,6 +44,9 @@ object VpnController {
     }
 
     fun readVpnRunning(context: Context): Boolean {
+        // A local proxy session owns no VPN interface; its marker keeps the
+        // running state visible after the App restarts.
+        if (localProxyMarker(context).isFile) return true
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces() ?: return false
             while (interfaces.hasMoreElements()) {
@@ -62,6 +66,27 @@ object VpnController {
         }
 
         return false
+    }
+
+    fun localProxyMarker(context: Context): File =
+        File(context.filesDir, localProxyRelativePath)
+
+    fun writeLocalProxyMarker(context: Context): Boolean = try {
+        val file = localProxyMarker(context)
+        file.parentFile?.takeIf { !it.exists() }?.mkdirs()
+        file.writeText("running")
+        true
+    } catch (error: Exception) {
+        XLog.w("VpnController: failed to write the local proxy marker")
+        false
+    }
+
+    fun clearLocalProxyMarker(context: Context) {
+        try {
+            localProxyMarker(context).delete()
+        } catch (error: Exception) {
+            XLog.w("VpnController: failed to clear the local proxy marker")
+        }
     }
 
     fun buildShortcutStartIntent(context: Context): Intent {
