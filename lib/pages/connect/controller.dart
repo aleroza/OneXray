@@ -21,6 +21,7 @@ import 'package:onexray/service/connect/coordinator.dart';
 import 'package:onexray/service/connect/runtime.dart';
 import 'package:onexray/service/connect/runtime_host.dart';
 import 'package:onexray/service/connect/settings.dart';
+import 'package:onexray/service/advanced/platform_policy.dart';
 import 'package:onexray/service/connect/routing/custom/service.dart';
 import 'package:onexray/service/connect/routing/custom/configuration.dart';
 
@@ -601,6 +602,72 @@ class ConnectController extends PageCubit<ConnectPageState> with ServerLabels {
 
   Future<void> chooseTrafficMethod(BuildContext context) =>
       context.pushScoped(AppPageDestination.routing);
+
+  /// Saves the App-managed ingress switches. The mode changes the compiled
+  /// configuration, so a connected session needs a confirmed restart.
+  Future<bool> changeInbound(
+    BuildContext context,
+    Map<String, dynamic> values, {
+    String? label,
+  }) async {
+    if (connectionView.busy || pendingChange != null) return false;
+    pendingChange = 'inbound';
+    try {
+      final current = await coordinator.configuration;
+      if (!context.mounted || !isPageActive) return false;
+      final policy = current.policy.toJson();
+      final section = Map<String, dynamic>.from(
+        policy['inbound'] as Map<String, dynamic>,
+      )..addAll(values);
+      policy['inbound'] = section;
+      final next = ConnectionConfiguration(
+        connection: current.connection,
+        policy: PlatformPolicy.fromJson(policy),
+      );
+      if (next.encode() == current.encode()) {
+        configuration = current;
+        return true;
+      }
+      final l = AppLocalizations.of(context)!;
+      final reconnect =
+          coordinator.state.value.phase == ConnectionPhase.connected;
+      if (reconnect &&
+          !await showApplyAndReconnectDialog(
+            context,
+            label: label ?? l.connectionTunnelModeTitle,
+          )) {
+        return false;
+      }
+      if (!context.mounted || !isPageActive) return false;
+      ConnectionConfiguration? saved;
+      await runConnectionAction(context, coordinator, () async {
+        await coordinator.apply(
+          next,
+          expectedConfiguration: current.encode(),
+          allowReconnect: reconnect,
+        );
+        saved = await coordinator.configuration;
+      });
+      final result = saved;
+      if (result == null) return false;
+      configuration = result;
+      return true;
+    } catch (error, stackTrace) {
+      if (context.mounted && isPageActive) {
+        await runConnectionAction(context, coordinator, () async {
+          Error.throwWithStackTrace(error, stackTrace);
+        });
+      }
+      return false;
+    } finally {
+      pendingChange = null;
+    }
+  }
+
+  bool get tunEnabled => configuration.policy.tunEnabled;
+  bool get socksEnabled => configuration.policy.socksEnabled;
+  int get socksPort => configuration.policy.socksPort;
+  bool get keepConfigInbounds => configuration.policy.keepConfigInbounds;
 
   ConnectionSettings _ordinarySettings(ConnectionSettings settings) =>
       ConnectionSettings.fromJson({...settings.toJson(), 'expert': false});

@@ -1023,5 +1023,15 @@
   "geodataCategoriesAndReferences": "分類與引用",
   "xrayRecordDnsHint": "日誌可能包含造訪的網域。",
   "importPreviewIncomplete": "匯入未完成",
-  "importPreviewResultSummary": "已匯入 {completed} 項，失敗 {failed} 項。"
+  "importPreviewResultSummary": "已匯入 {completed} 項，失敗 {failed} 項。",
+  "connectionTunnelModeTitle": "隧道模式",
+  "connectionTunnelModeDescription": "選擇流量如何進入隧道。",
+  "connectionTunMode": "TUN 隧道",
+  "connectionTunModeDescription": "在系統 VPN 隧道中接管全部流量。",
+  "connectionSocksPortMode": "SOCKS 連接埠",
+  "connectionSocksPortModeDescription": "監聽本機 SOCKS 連接埠，不使用系統隧道。",
+  "connectionSocksPortLabel": "SOCKS 連接埠",
+  "connectionConfigInbounds": "設定中的入站",
+  "connectionConfigInboundsDescription": "保留 Raw 或供應商完整設定中描述的入站。",
+  "connectionInboundPortInvalid": "請輸入 1024 到 65535 之間的連接埠。"
 }

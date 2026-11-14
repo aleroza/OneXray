@@ -3000,5 +3000,15 @@
   "xrayRecordDnsHint": "Logs may include the domains you visit.",
   "importPreviewIncomplete": "Import incomplete",
   "importPreviewResultSummary": "Imported: {completed}. Failed: {failed}.",
-  "@importPreviewResultSummary": {"placeholders": {"completed": {"type": "int"}, "failed": {"type": "int"}}}
+  "@importPreviewResultSummary": {"placeholders": {"completed": {"type": "int"}, "failed": {"type": "int"}}},
+  "connectionTunnelModeTitle": "Tunnel mode",
+  "connectionTunnelModeDescription": "Choose how traffic enters the tunnel.",
+  "connectionTunMode": "TUN tunnel",
+  "connectionTunModeDescription": "Capture all traffic in the system VPN tunnel.",
+  "connectionSocksPortMode": "SOCKS port",
+  "connectionSocksPortModeDescription": "Listen on a local SOCKS port instead of the system tunnel.",
+  "connectionSocksPortLabel": "SOCKS port",
+  "connectionConfigInbounds": "Configuration inbounds",
+  "connectionConfigInboundsDescription": "Keep the inbounds described by a Raw or provider configuration.",
+  "connectionInboundPortInvalid": "Enter a port between 1024 and 65535."
 }

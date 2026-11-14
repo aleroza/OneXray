@@ -1023,5 +1023,15 @@
   "geodataCategoriesAndReferences": "دسته‌ها و ارجاع‌ها",
   "xrayRecordDnsHint": "گزارش‌ها ممکن است شامل دامنه‌های بازدیدشده باشند.",
   "importPreviewIncomplete": "واردسازی کامل نشد",
-  "importPreviewResultSummary": "واردشده: {completed}؛ ناموفق: {failed}."
+  "importPreviewResultSummary": "واردشده: {completed}؛ ناموفق: {failed}.",
+  "connectionTunnelModeTitle": "حالت تونل",
+  "connectionTunnelModeDescription": "انتخاب کنید ترافیک چگونه وارد تونل شود.",
+  "connectionTunMode": "تونل TUN",
+  "connectionTunModeDescription": "همهٔ ترافیک را در تونل VPN سیستمی می‌گیرد.",
+  "connectionSocksPortMode": "درگاه SOCKS",
+  "connectionSocksPortModeDescription": "به‌جای تونل سیستمی، روی یک درگاه محلی SOCKS گوش می‌دهد.",
+  "connectionSocksPortLabel": "درگاه SOCKS",
+  "connectionConfigInbounds": "ورودی‌های پیکربندی",
+  "connectionConfigInboundsDescription": "ورودی‌های توصیف‌شده در پیکربندی Raw یا ارائه‌دهنده را نگه می‌دارد.",
+  "connectionInboundPortInvalid": "درگاهی بین 1024 و 65535 وارد کنید."
 }

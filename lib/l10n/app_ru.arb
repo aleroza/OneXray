@@ -1023,5 +1023,15 @@
   "geodataCategoriesAndReferences": "Категории и ссылки",
   "xrayRecordDnsHint": "Журналы могут содержать посещённые домены.",
   "importPreviewIncomplete": "Импорт завершён не полностью",
-  "importPreviewResultSummary": "Импортировано: {completed}. Не импортировано: {failed}."
+  "importPreviewResultSummary": "Импортировано: {completed}. Не импортировано: {failed}.",
+  "connectionTunnelModeTitle": "Режим туннеля",
+  "connectionTunnelModeDescription": "Выберите, как трафик попадает в туннель.",
+  "connectionTunMode": "TUN-туннель",
+  "connectionTunModeDescription": "Захватывает весь трафик в системном VPN-туннеле.",
+  "connectionSocksPortMode": "SOCKS-порт",
+  "connectionSocksPortModeDescription": "Слушает локальный SOCKS-порт вместо системного туннеля.",
+  "connectionSocksPortLabel": "SOCKS-порт",
+  "connectionConfigInbounds": "Инбаунды из конфига",
+  "connectionConfigInboundsDescription": "Сохранять инбаунды, описанные в Raw или полном конфиге провайдера.",
+  "connectionInboundPortInvalid": "Введите порт от 1024 до 65535."
 }

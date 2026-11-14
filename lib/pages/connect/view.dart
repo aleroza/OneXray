@@ -37,6 +37,7 @@ class ConnectView extends StatelessWidget {
     required this.onAddServers,
     required this.onServer,
     required this.onMethod,
+    this.inboundMode,
   });
   final ConnectionView view;
   final Widget Function(bool desktop)? trafficBuilder;
@@ -49,10 +50,13 @@ class ConnectView extends StatelessWidget {
   final String? targetKind;
   final String? runningPath;
   final String? fallbackMessage;
-  final String? locationDetail, locationHealth, methodDetail;
+  final String? locationDetail;
+  final String? locationHealth;
   final String method;
+  final String? methodDetail;
   final bool methodEnabled;
   final VoidCallback onConnection, onAddServers, onServer, onMethod;
+  final Widget? inboundMode;
 
   bool get _connectionPending => pendingChange == 'connection';
   bool get _busy => view.busy || _connectionPending;
@@ -205,6 +209,10 @@ class ConnectView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+            if (inboundMode != null) ...[
+              inboundMode!,
+              const SizedBox(height: 16),
+            ],
             Card(
               key: const ValueKey('connection-session'),
               margin: EdgeInsets.zero,

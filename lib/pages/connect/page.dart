@@ -9,6 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:onexray/pages/shared/widgets/app_activity.dart';
 import 'package:onexray/l10n/localizations/app_localizations.dart';
 import 'package:onexray/pages/connect/controller.dart';
+import 'package:onexray/pages/connect/inbound_mode.dart';
 import 'package:onexray/pages/connect/view.dart';
 import 'package:onexray/pages/main/page_visibility.dart';
 
@@ -105,6 +106,37 @@ class _ConnectPageState extends State<ConnectPage> {
                 onAddServers: () => controller.addServers(context),
                 onServer: () => controller.chooseServer(context),
                 onMethod: () => controller.chooseTrafficMethod(context),
+                inboundMode: InboundModeCard(
+                  tunEnabled: controller.tunEnabled,
+                  socksEnabled: controller.socksEnabled,
+                  socksPort: controller.socksPort,
+                  keepConfigInbounds: controller.keepConfigInbounds,
+                  enabled:
+                      !state.connectionView.busy && state.pendingChange == null,
+                  onTunChanged: (value) => controller.changeInbound(
+                    context,
+                    {'tunEnabled': value},
+                    label: value
+                        ? l.connectionTunMode
+                        : l.connectionSocksPortMode,
+                  ),
+                  onSocksChanged: (value) => controller.changeInbound(
+                    context,
+                    {'socksEnabled': value},
+                    label: value
+                        ? l.connectionSocksPortMode
+                        : l.connectionTunMode,
+                  ),
+                  onKeepConfigInboundsChanged: (value) =>
+                      controller.changeInbound(context, {
+                        'keepConfigInbounds': value,
+                      }, label: l.connectionConfigInbounds),
+                  onSocksPortChanged: (value) => controller.changeInbound(
+                    context,
+                    {'socksPort': value},
+                    label: l.connectionSocksPortMode,
+                  ),
+                ),
               );
             },
           ),

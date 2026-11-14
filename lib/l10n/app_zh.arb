@@ -1023,5 +1023,15 @@
   "geodataCategoriesAndReferences": "分类与引用",
   "xrayRecordDnsHint": "日志可能包含访问的域名。",
   "importPreviewIncomplete": "导入未完成",
-  "importPreviewResultSummary": "已导入 {completed} 项，失败 {failed} 项。"
+  "importPreviewResultSummary": "已导入 {completed} 项，失败 {failed} 项。",
+  "connectionTunnelModeTitle": "隧道模式",
+  "connectionTunnelModeDescription": "选择流量如何进入隧道。",
+  "connectionTunMode": "TUN 隧道",
+  "connectionTunModeDescription": "在系统 VPN 隧道中接管全部流量。",
+  "connectionSocksPortMode": "SOCKS 端口",
+  "connectionSocksPortModeDescription": "监听本地 SOCKS 端口，不使用系统隧道。",
+  "connectionSocksPortLabel": "SOCKS 端口",
+  "connectionConfigInbounds": "配置中的入站",
+  "connectionConfigInboundsDescription": "保留 Raw 或提供方完整配置中描述的入站。",
+  "connectionInboundPortInvalid": "请输入 1024 到 65535 之间的端口。"
 }
