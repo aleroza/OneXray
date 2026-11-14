@@ -3,6 +3,23 @@
 Cross-platform Flutter Xray-core client. [Current contracts](docs/README.md)
 describe shipped behavior; Git history holds retired plans and progress logs.
 
+> This checkout is our fork of <https://github.com/YuanDevTeam/OneXray>.
+> Read [fork knowledge base](docs/fork/KNOWLEDGE_BASE.md) before changing
+> connection, configuration or tunnel code; it maps the internals.
+
+## Fork rules
+
+- This fork is updated by rebasing our own commits on top of upstream. Keep the
+  diff minimal: no refactoring, renaming, reformatting, decoration, dependency
+  bumps or unrelated cleanups. Every extra edit is a future merge conflict.
+- Extend existing extension points instead of rewriting the surrounding code.
+- Default values of new settings must reproduce current upstream behavior
+  exactly, so an update never changes a user's mode on its own.
+- Never edit generated output (Drift, Pigeon, FFI, localization) by hand; edit
+  the source and regenerate.
+- One logical change per commit. Track fork decisions in
+  [docs/fork/KNOWLEDGE_BASE.md](docs/fork/KNOWLEDGE_BASE.md).
+
 ## Engineering rules
 
 - Dependencies flow `pages → service → core`. Services own business logic;

@@ -392,6 +392,28 @@ implementation retains platform-support and review risks, and the iOS main App i
 long-running background proxy. See [Apple TN3120](https://developer.apple.com/documentation/technotes/tn3120-expected-use-cases-for-network-extension-packet-tunnel-providers).
 Cross-device connectivity, UDP, firewalls, lock screen and signed channels require platform testing.
 
+## 托管入口模式
+
+设备平台策略保存三个开关：TUN 托管入口、SOCKS 托管端口和是否使用配置自带的入站。
+默认 TUN 开启、SOCKS 关闭、保留配置入站，因此升级不改变既有运行方式。
+
+托管入口只保留 `tunIn` 标签，路由规则和流量统计因此不随协议改变。
+TUN 开启时托管入口是 TUN；TUN 关闭且 SOCKS 开启时托管入口变为 `127.0.0.1` 上的
+固定端口 SOCKS；两者同时开启时 SOCKS 使用 `app-socks` 标签作为附加本地代理。
+两个开关都关闭且配置没有自带入站时，配置无入口，编译直接失败。
+
+SOCKS 托管端口由用户指定，取值范围 1024–65535，不能与运行端口、局域网共享端口
+或本地 HTTP API 端口冲突；运行时端口分配会避开该端口。
+
+关闭 TUN 托管入口时，原生宿主不建立系统隧道，也不接管任何流量：桌面端不创建
+TUN 设备，Android 不建立 VPN 接口，Apple 的隧道不包含默认路由。此时运行请求
+携带 `tunnelEnabled=false`，本地代理模式不注入隧道文件描述符，也不改写系统 DNS。
+
+配置自带入站包括 Raw、提供方完整配置和高级模板中除 `tunIn` 之外的入站。
+关闭该开关时这些入站不进入有效配置；`tunIn` 始终属于托管入口，由前两个开关决定。
+MSIX 的私有回环 SOCKS 是系统隧道后端，不受 TUN 开关影响；该构建额外提供的
+SOCKS 端口仍按用户设置创建。
+
 ## 隧道与平台策略
 
 TUN 地址只读，隧道 IPv4/IPv6 DNS 与 Apple DoT 域名可编辑，独立于路由 DNS，保存在平台策略 JSON。
