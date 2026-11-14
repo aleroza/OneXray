@@ -79,6 +79,11 @@ final class PlatformPolicy {
     if (port < 1024 || port > 65535) {
       throw const FormatException('Proxy port must be between 1024 and 65535');
     }
+    final inbound = policy['inbound'] as Map<String, dynamic>;
+    final inboundPort = inbound['socksPort'] as int;
+    if (inboundPort < 1024 || inboundPort > 65535) {
+      throw const FormatException('SOCKS port must be between 1024 and 65535');
+    }
     return PlatformPolicy._(policy);
   }
 
@@ -96,6 +101,16 @@ final class PlatformPolicy {
   String get maskAddress => toJson()['log']['maskIp'] == true ? 'full' : '';
   bool get lanProxyEnabled => toJson()['lanProxy']['enabled'] as bool;
   int get lanProxyPort => toJson()['lanProxy']['port'] as int;
+
+  /// App-managed ingress. The TUN tunnel and the local SOCKS port are
+  /// independent switches; the managed ingress follows the first enabled one.
+  bool get tunEnabled => toJson()['inbound']['tunEnabled'] as bool;
+  bool get socksEnabled => toJson()['inbound']['socksEnabled'] as bool;
+  int get socksPort => toJson()['inbound']['socksPort'] as int;
+
+  /// Keeps the inbounds described by a Raw, provider or advanced configuration.
+  bool get keepConfigInbounds =>
+      toJson()['inbound']['keepConfigInbounds'] as bool;
 
   static const tunIpv4Address = '198.18.0.1';
   static const tunIpv6Address = 'fc00::1';
@@ -267,6 +282,12 @@ const _defaults = <String, dynamic>{
   'dnsServerName': 'dns.google',
   'xrayOutboundInterfaceName': '',
   'lanProxy': {'enabled': false, 'port': 11024},
+  'inbound': {
+    'tunEnabled': true,
+    'socksEnabled': false,
+    'socksPort': 10808,
+    'keepConfigInbounds': true,
+  },
   'android': {
     'appScope': 'all',
     'includedAppPackageNames': <String>[],

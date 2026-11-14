@@ -232,6 +232,7 @@ class ConnectionRuntime {
       request.coreInvokeText,
       snapshotToken: request.snapshotToken,
       metadataJson: metadataJson,
+      tunnelEnabled: request.tunnelEnabled,
     );
     return ConnectionRuntime._(
       configuration: configuration,

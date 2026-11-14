@@ -14,6 +14,7 @@ import 'package:onexray/core/pigeon/host_api.dart';
 import 'package:onexray/core/pigeon/messages.g.dart';
 import 'package:onexray/core/pigeon/model.dart';
 import 'package:onexray/service/advanced/local_api/service.dart';
+import 'package:onexray/service/advanced/platform_policy.dart';
 import 'package:onexray/service/advanced/local_api/settings.dart';
 import 'package:onexray/service/connect/preparation.dart';
 import 'package:onexray/service/connect/resolver.dart';
@@ -639,6 +640,40 @@ void main() {
         },
       );
     });
+
+    test(
+      'the local proxy mode keeps the native host from capturing traffic',
+      () async {
+        final input = _providerInput(profile.id);
+        final runtime = await _providerPreparation(db).prepare(
+          ConnectionConfiguration(
+            connection: input.connection,
+            policy: PlatformPolicy.fromJson({
+              'xrayOutboundInterfaceName': 'Ethernet',
+              'inbound': {'tunEnabled': false, 'socksEnabled': true},
+            }),
+          ),
+        );
+        expect(runtime.request.tunnelEnabled, isFalse);
+        final request =
+            jsonDecode(runtime.request.coreInvokeText!) as Map<String, dynamic>;
+        final payload = request['payload'] as Map<String, dynamic>;
+        final config =
+            jsonDecode(payload['xrayJson'] as String) as Map<String, dynamic>;
+        final inbounds = config['inbounds'] as List;
+        expect(
+          inbounds.any((inbound) => inbound['protocol'] == 'tun'),
+          isFalse,
+        );
+        expect(
+          inbounds.any(
+            (inbound) =>
+                inbound['protocol'] == 'socks' && inbound['port'] == '10808',
+          ),
+          isTrue,
+        );
+      },
+    );
 
     test('personal Raw runtime retains its prepared name after rename and accepts older metadata', () async {
       final id = await db.coreConfigDao.insertRow(

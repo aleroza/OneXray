@@ -13,6 +13,10 @@ class StartVpnRequest {
   String? snapshotToken;
   String? metadataJson;
 
+  /// Whether the native host captures traffic through a system tunnel.
+  /// A local proxy session keeps the Core running without any capture.
+  bool? tunnelEnabled;
+
   StartVpnRequest(
     this.tun,
     this.socksPort,
@@ -20,6 +24,7 @@ class StartVpnRequest {
     this.coreInvokeText, {
     this.snapshotToken,
     this.metadataJson,
+    this.tunnelEnabled,
   });
 
   factory StartVpnRequest.fromJson(Map<String, dynamic> json) =>

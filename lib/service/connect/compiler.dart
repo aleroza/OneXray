@@ -115,6 +115,13 @@ class RuntimeOptions {
   final bool dnsLog;
   final String maskAddress;
 
+  /// App-managed ingress switches. The TUN tunnel and the local SOCKS port are
+  /// independent; the managed ingress follows the first enabled one.
+  final bool tunEnabled;
+  final bool socksEnabled;
+  final int localSocksPort;
+  final bool keepConfigInbounds;
+
   RuntimeOptions({
     required this.platform,
     WindowsMode? windowsMode,
@@ -133,6 +140,10 @@ class RuntimeOptions {
     this.logLevel = 'warning',
     this.dnsLog = true,
     this.maskAddress = '',
+    this.tunEnabled = true,
+    this.socksEnabled = false,
+    this.localSocksPort = 10808,
+    this.keepConfigInbounds = true,
   }) : windowsMode = windowsMode ?? windowsBuildMode {
     if (metricsPort == socksPort) {
       throw const FormatException('Runtime ports are invalid');
@@ -145,6 +156,15 @@ class RuntimeOptions {
       throw const FormatException(
         'LAN proxy port conflicts with a runtime port',
       );
+    }
+    if (socksEnabled && (localSocksPort < 1024 || localSocksPort > 65535)) {
+      throw const FormatException('SOCKS port must be within 1024–65535');
+    }
+    if (socksEnabled &&
+        (localSocksPort == metricsPort ||
+            localSocksPort == socksPort ||
+            (lanProxyEnabled && localSocksPort == lanProxyPort))) {
+      throw const FormatException('SOCKS port conflicts with a runtime port');
     }
     if ((platform == ConnectionPlatform.windows ||
             platform == ConnectionPlatform.linux) &&
@@ -328,26 +348,27 @@ class ConnectionCompiler {
           includeLanProxy: options.lanProxyEnabled,
         );
         final inbounds = _objects(template, 'inbounds');
-        for (var index = 0; index < inbounds.length; index++) {
-          if (inbounds[index]['tag'] == 'tunIn') {
-            inbounds[index] = {
-              ..._runtimeInbound(
-                options,
-                fakeDns: FakeDns.usedByRaw(template),
-              ).toJson(),
-              ...inbounds[index],
-            };
+        final managed = _managedInbounds(
+          options,
+          fakeDns: FakeDns.usedByRaw(template),
+        );
+        final primary = managed.where((inbound) => inbound.tag == 'tunIn');
+        if (primary.isNotEmpty) {
+          for (var index = 0; index < inbounds.length; index++) {
+            if (inbounds[index]['tag'] == 'tunIn') {
+              inbounds[index] = {...primary.first.toJson(), ...inbounds[index]};
+            }
           }
         }
         template['inbounds'] = inbounds;
+        final advanced = _rawRuntimeMap(
+          template,
+          options,
+          includeLanProxy: options.lanProxyEnabled,
+        );
+        _requireInbound(advanced);
         return CompiledConnection(
-          xrayJson: jsonEncode(
-            _rawRuntimeMap(
-              template,
-              options,
-              includeLanProxy: options.lanProxyEnabled,
-            ),
-          ),
+          xrayJson: jsonEncode(advanced),
           entries: entries,
           finalExit: null,
           nodeTags: nodeTags,
@@ -443,6 +464,7 @@ class ConnectionCompiler {
         selector: selector,
         fallbackTag: selector.first,
       );
+      final managedTags = _managedInboundTags(options);
       final fakeDns = !allVpn && (ordinary?.fakeDns ?? settings.smart.fakeDns);
       dnsSettings.validate(
         directEnabled:
@@ -473,7 +495,7 @@ class ConnectionCompiler {
           certLocation: VpnConstants.datDir,
         ),
         inbounds: [
-          _runtimeInbound(
+          ..._managedInbounds(
             options,
             fakeDns: FakeDns.usesServer(dns),
             sniffing: sniffing,
@@ -515,24 +537,27 @@ class ConnectionCompiler {
                 inboundTag: [dnsDirect],
                 outboundTag: 'direct',
               ),
-            XrayRoutingRule(
-              ruleTag: 'app-tunnel-dns',
-              inboundTag: ['tunIn'],
-              port: '53',
-              outboundTag: dnsOutbound,
-            ),
-            XrayRoutingRule(
-              ruleTag: 'app-tunnel-dot',
-              inboundTag: ['tunIn'],
-              port: '853',
-              balancerTag: 'proxy',
-            ),
+            if (managedTags.isNotEmpty)
+              XrayRoutingRule(
+                ruleTag: 'app-tunnel-dns',
+                inboundTag: managedTags,
+                port: '53',
+                outboundTag: dnsOutbound,
+              ),
+            if (managedTags.isNotEmpty)
+              XrayRoutingRule(
+                ruleTag: 'app-tunnel-dot',
+                inboundTag: managedTags,
+                port: '853',
+                balancerTag: 'proxy',
+              ),
             ...rules,
-            if (selection.automatic)
+            if (selection.automatic &&
+                (managedTags.isNotEmpty || options.lanProxyEnabled))
               XrayRoutingRule(
                 ruleTag: 'app-proxy-catchall',
                 inboundTag: [
-                  'tunIn',
+                  ...managedTags,
                   if (options.lanProxyEnabled) lanProxyInboundTag,
                 ],
                 balancerTag: 'proxy',
@@ -542,6 +567,7 @@ class ConnectionCompiler {
       );
       config = normal.toJson();
     }
+    _requireInbound(config);
     return CompiledConnection(
       xrayJson: jsonEncode(config),
       entries: entries,
@@ -549,6 +575,14 @@ class ConnectionCompiler {
       nodeTags: nodeTags,
       profile: profile,
     );
+  }
+
+  /// A configuration without any inbound cannot carry traffic.
+  static void _requireInbound(Map<String, dynamic> config) {
+    final inbounds = config['inbounds'];
+    if (inbounds is! List || inbounds.isEmpty) {
+      throw const FormatException('The configuration has no inbound');
+    }
   }
 
   static Map<String, dynamic> _node(ResolvedServer node, String tag) {
@@ -584,18 +618,67 @@ class ConnectionCompiler {
     return value.cast<Map<String, dynamic>>().toList();
   }
 
-  static XrayInbound _runtimeInbound(
+  /// The App-managed ingress. The TUN tunnel and the local SOCKS port are
+  /// independent switches. The primary ingress keeps the `tunIn` tag so the
+  /// generated routing rules and the traffic counters stay valid.
+  static List<XrayInbound> _managedInbounds(
     RuntimeOptions options, {
     bool fakeDns = false,
     RoutingSniffingSettings sniffing = const RoutingSniffingSettings(),
   }) {
     if (options.usesWindowsSystemVpn) {
-      return createSocksInbound(
-        '${options.socksPort}',
-        fakeDns: fakeDns,
-        sniffing: sniffing,
+      // The MSIX system tunnel runs on a private loopback SOCKS.
+      return [
+        createSocksInbound(
+          '${options.socksPort}',
+          fakeDns: fakeDns,
+          sniffing: sniffing,
+        ),
+        if (options.socksEnabled)
+          createSocksInbound(
+            '${options.localSocksPort}',
+            tag: socksInboundTag,
+            fakeDns: fakeDns,
+            sniffing: sniffing,
+          ),
+      ];
+    }
+    final inbounds = <XrayInbound>[];
+    if (options.tunEnabled) {
+      inbounds.add(_tunInbound(options, fakeDns: fakeDns, sniffing: sniffing));
+    }
+    if (options.socksEnabled) {
+      inbounds.add(
+        createSocksInbound(
+          '${options.localSocksPort}',
+          tag: options.tunEnabled ? socksInboundTag : 'tunIn',
+          fakeDns: fakeDns,
+          sniffing: sniffing,
+        ),
       );
     }
+    return inbounds;
+  }
+
+  /// Whether the effective configuration owns a native TUN tunnel. The native
+  /// host captures traffic only for a managed TUN inbound.
+  static bool managedTunEnabled(RuntimeOptions options) =>
+      !options.usesWindowsSystemVpn && options.tunEnabled;
+
+  /// Tags of the App-managed ingress in the effective configuration.
+  static List<String> _managedInboundTags(RuntimeOptions options) => [
+    if (options.usesWindowsSystemVpn ||
+        options.tunEnabled ||
+        options.socksEnabled)
+      'tunIn',
+    if (options.tunEnabled && options.socksEnabled) socksInboundTag,
+  ];
+
+  static XrayInbound _tunInbound(
+    RuntimeOptions options, {
+    bool fakeDns = false,
+    RoutingSniffingSettings sniffing = const RoutingSniffingSettings(),
+  }) {
     final nativeTun =
         options.platform == ConnectionPlatform.linux ||
         options.platform == ConnectionPlatform.windows;
@@ -665,6 +748,10 @@ class ConnectionCompiler {
     );
     final outbounds = _objects(config, 'outbounds');
     final inbounds = _objects(config, 'inbounds');
+    if (!options.keepConfigInbounds) {
+      // The App-managed ingress replaces every inbound described by the source.
+      inbounds.clear();
+    }
     if (includeLanProxy) {
       validateLanProxyInbounds(inbounds, options.lanProxyPort);
     }
@@ -681,34 +768,51 @@ class ConnectionCompiler {
           'Raw inbound conflicts with an App-managed port',
         );
       }
+      if (options.socksEnabled &&
+          portIncludes(inbound['port'], options.localSocksPort)) {
+        throw const FormatException(
+          'Raw inbound conflicts with the App-managed SOCKS port',
+        );
+      }
     }
     final managed = inbounds.where((value) => value['tag'] == 'tunIn').toList();
     if (managed.length > 1) {
       throw const FormatException('Only one App-managed tunIn is allowed');
     }
-    final generated = _runtimeInbound(
+    final generated = _managedInbounds(
       options,
       fakeDns: FakeDns.usedByRaw(config),
-    ).toJson();
+    );
+    final primary = generated.where((inbound) => inbound.tag == 'tunIn');
+    final extra = generated.where((inbound) => inbound.tag != 'tunIn');
     if (managed.isEmpty) {
-      inbounds.insert(0, generated);
+      inbounds.insertAll(0, generated.map((inbound) => inbound.toJson()));
     } else {
       final inbound = managed.single;
-      if (options.usesWindowsSystemVpn) {
+      if (primary.isNotEmpty && primary.first.protocol == 'socks') {
+        final generatedInbound = primary.first.toJson();
         final settings = inbound['protocol'] == 'socks'
             ? _object(inbound, 'settings')
             : <String, dynamic>{};
-        settings.addAll(generated['settings'] as Map<String, dynamic>);
+        settings.addAll(generatedInbound['settings'] as Map<String, dynamic>);
         for (final key in ['protocol', 'listen', 'port']) {
-          inbound[key] = generated[key];
+          inbound[key] = generatedInbound[key];
         }
         inbound['settings'] = settings;
+      } else if (primary.isEmpty) {
+        // Without a managed TUN the source tunnel slot stays unused.
+        inbounds.remove(inbound);
       } else {
         if (inbound['protocol'] != 'tun') {
           throw const FormatException('tunIn must use the tun protocol');
         }
         final settings = _object(inbound, 'settings');
-        final platform = generated['settings'] as Map<String, dynamic>;
+        final platform =
+            _tunInbound(
+                  options,
+                  fakeDns: FakeDns.usedByRaw(config),
+                ).toJson()['settings']
+                as Map<String, dynamic>;
         for (final key in const [
           'name',
           'mtu',
@@ -731,6 +835,7 @@ class ConnectionCompiler {
           );
         }
       }
+      inbounds.insertAll(0, extra.map((inbound) => inbound.toJson()));
     }
     if (includeLanProxy) {
       inbounds.add(

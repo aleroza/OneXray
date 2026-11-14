@@ -360,8 +360,33 @@ class ConnectionPreparation {
     }
     final ports = await allocateRuntimePorts(
       userInbounds.cast<Map<String, dynamic>>(),
-      excludePorts: [?apiPort, if (shareLanProxy) policy.lanProxyPort],
+      excludePorts: [
+        ?apiPort,
+        if (shareLanProxy) policy.lanProxyPort,
+        if (policy.socksEnabled) policy.socksPort,
+      ],
       getFreePorts: getFreePorts,
+    );
+    final options = RuntimeOptions(
+      platform: platform,
+      sessionDirectory: VpnConstants.runDir,
+      socksPort: ports[0],
+      metricsPort: ports[1],
+      lanProxyEnabled: shareLanProxy,
+      lanProxyPort: policy.lanProxyPort,
+      ipv6: policy.ipv6Enabled,
+      dialing: policy.dialing,
+      tunDnsIpv4Address: policy.dnsIpv4Address,
+      tunDnsIpv6Address: policy.dnsIpv6Address,
+      interfaceName: policy.xrayOutboundInterfaceName,
+      logEnabled: policy.logEnabled,
+      logLevel: policy.logLevel,
+      dnsLog: policy.recordDns,
+      maskAddress: policy.maskAddress,
+      tunEnabled: policy.tunEnabled,
+      socksEnabled: policy.socksEnabled,
+      localSocksPort: policy.socksPort,
+      keepConfigInbounds: policy.keepConfigInbounds,
     );
     final compiled = ConnectionCompiler.compile(
       settings: settings,
@@ -371,23 +396,7 @@ class ConnectionPreparation {
       profile: profile,
       custom: profile == null ? custom : null,
       regions: regions,
-      options: RuntimeOptions(
-        platform: platform,
-        sessionDirectory: VpnConstants.runDir,
-        socksPort: ports[0],
-        metricsPort: ports[1],
-        lanProxyEnabled: shareLanProxy,
-        lanProxyPort: policy.lanProxyPort,
-        ipv6: policy.ipv6Enabled,
-        dialing: policy.dialing,
-        tunDnsIpv4Address: policy.dnsIpv4Address,
-        tunDnsIpv6Address: policy.dnsIpv6Address,
-        interfaceName: policy.xrayOutboundInterfaceName,
-        logEnabled: policy.logEnabled,
-        logLevel: policy.logLevel,
-        dnsLog: policy.recordDns,
-        maskAddress: policy.maskAddress,
-      ),
+      options: options,
     );
     await _requireDependencies(
       geoDataReferences(jsonDecode(compiled.xrayJson) as Map<String, dynamic>),
@@ -431,6 +440,8 @@ class ConnectionPreparation {
           payload: RunXrayRequest(compiled.xrayJson).toJson(),
         ).toJson(),
       ),
+      // Without a managed TUN the native host must not capture any traffic.
+      tunnelEnabled: ConnectionCompiler.managedTunEnabled(options),
     );
     return ConnectionRuntime.create(
       configuration: configuration,
