@@ -537,3 +537,62 @@ JDK 21 `~/nix/store/7q4av7wzjw098rcc83v1bb1blss1wccx-openjdk-21.0.12+2`.
    Gradle `assembleRelease` — ~22 мин.
 8. **Не проверено локально**: Swift/Apple (нет Swift в nix) и Windows.
 
+
+### F-004. Системный прокси (ОС → локальный SOCKS-порт)
+
+- **Задача**: пока соединение активно, направлять системный прокси ОС на
+  локальный SOCKS-порт, с корректным восстановлением пользовательских настроек
+  при остановке, выходе и падении. Только desktop; поведение по умолчанию не меняется.
+- **Хранение**: намерение — секция `policy.systemProxy.enabled` в `PlatformPolicy`
+  (дефолт `false`). Снимок пользовательских значений — JSON-файл
+  `system-proxy-snapshot.json` в application support directory; сам факт его
+  существования = маркер «применяли мы».
+- **Точки расширения**: новый слой `lib/core/system_proxy/` (абстракция
+  `SystemProxyBackend` + плановый командный исполнитель) и сервис
+  `lib/service/shared/system_proxy/` (серийная очередь `CommandSerialExecutor`,
+  снимок как флаг, ни один метод не бросает — возвращает причину строкой).
+  Хуки `applySystemProxy`/`removeSystemProxy` в `ConnectionRuntimeHost`
+  (после подтверждённых start/stop), вызовы перед выходом в `TrayService`,
+  стартовая зачистка оглушённого прокси в `ServiceManager._clearStaleSystemProxy`.
+- **Семантика**:
+  - Применение — только после подтверждённого connect; откат — после
+    подтверждённого stop и при внешнем уходе из connected (нативный статус
+    disconnected без нашей команды — отзыв VPN, падение ядра); сбой
+    применения = сначала откат значений ОС (remove), тост и возврат
+    сохранённого намерения, соединение не рвётся. Причина применяется как
+    значение (хуки `Future<String?>`), а не исключение.
+  - Повторное apply не переснимает снимок; сбой apply сохраняет снимок для
+    будущего отката; remove без снимка — no-op; restore идёт только тем же
+    бэкендом (backendId в снимке).
+  - Bypass-список пользователя дополняется, никогда не заменяется: GNOME/macOS —
+    точные `localhost`, `127.0.0.1`, `::1` (GIO/macOS не понимают wildcard для IP);
+    KDE/Windows — `127.*`, у Windows IPv6 в квадратных скобках `[::1]`.
+  - Windows: после любой правки реестра (apply, restore и disable) обязательно
+    `InternetSetOptionW(39)` + `(37)`; per-connection опции WinINet не нужны.
+    `ProxyEnable` пишется последним (apply и восстановление включённого
+    снимка) или первым (если по снимку прокси был выключен) — обрыв записи не
+    может оставить включённый прокси без сервера; тип значения (REG_SZ /
+    REG_DWORD) сохраняется в снимке под ключом `ProxyEnable#type`.
+  - macOS: вывод `-getproxybypassdomains` парсится построчно (заголовки `…:` и
+    диагностические строки выбрасываются); пустой список пишется аргументом `Empty`;
+    PAC не читается и не трогается.
+  - Linux: GNOME/MATE — `gsettings` (mode пишется последним); KDE —
+    `kwriteconfig5/6` в `kioslaverc` (+необязательный dbus-signal reparse);
+    путь `kioslaverc` уважает `XDG_CONFIG_HOME` (отклонение от буквального
+    `~/.config` — сознательное).
+  - UI: тумблер виден только на desktop и активен только при активном
+    соединении (в иначе серый, но показывает сохранённое значение); включение
+    автоматически открывает локальный порт (со сценарием «применить и
+    переподключить»); закрытие локального порта гасит системный прокси.
+- **Файлы**: `core/system_proxy/{system_proxy_models,command_runner,gvariant,
+  system_proxy_backend,linux_backend,macos_backend,windows_backend,
+  windows_registry,windows_registry_ffi}.dart`,
+  `service/shared/system_proxy/{service,snapshot_store}.dart`,
+  `service/advanced/platform_policy.dart`, `service/connect/{runtime_host,
+  coordinator}.dart`, `service/manager.dart`, `service/shared/menu/tray/service.dart`,
+  `pages/connect/{inbound_mode,controller,page}.dart`, l10n (5 ARB).
+- **Тесты**: `test/core/system_proxy/*` (парсер GVariant, GNOME/KDE/macOS/Windows
+  бэкенды), `test/service/shared/system_proxy/service_test.dart`, кейсы
+  жизненного цикла в `test/service/connect/runtime_host_test.dart`,
+  `test/pages/connect/{inbound_mode,system_proxy_controller}_test.dart`,
+  обновлённый `test/service/shared/menu/tray/quit_test.dart`.
