@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:onexray/core/system_proxy/linux_backend.dart';
 import 'package:onexray/core/system_proxy/macos_backend.dart';
+import 'package:onexray/core/system_proxy/windows_backend.dart';
+import 'package:onexray/core/system_proxy/windows_registry_ffi.dart';
 import 'package:onexray/core/system_proxy/system_proxy_models.dart';
 
 /// A platform-specific way to read, change and roll back the OS proxy.
@@ -37,5 +39,8 @@ abstract interface class SystemProxyBackend {
 SystemProxyBackend? defaultSystemProxyBackend() {
   if (Platform.isLinux) return LinuxSystemProxyBackend();
   if (Platform.isMacOS) return MacSystemProxyBackend();
+  if (Platform.isWindows) {
+    return WindowsSystemProxyBackend(open: WindowsRegistryFfi.new);
+  }
   return null;
 }
