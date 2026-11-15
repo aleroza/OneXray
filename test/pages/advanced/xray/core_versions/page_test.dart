@@ -11,6 +11,7 @@ import 'package:onexray/pages/advanced/xray/core_versions/page.dart';
 import 'package:onexray/pages/theme/theme.dart';
 import 'package:onexray/service/advanced/xray/core_version/service.dart';
 import 'package:onexray/service/advanced/xray/core_version/storage.dart';
+import 'package:onexray/service/connect/runtime.dart';
 import 'package:onexray/service/settings/language/locale.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -66,12 +67,34 @@ void main() {
   Future<CoreVersionsController> buildController(
     WidgetTester tester, {
     required bool enabled,
+    bool installed = false,
+    Future<ConnectionRuntime?> Function()? readCurrentRuntime,
+    Future<void> Function()? disconnect,
   }) async {
     late CoreVersionsController controller;
     await tester.runAsync(() async {
       storage = CoreVersionStorage(
         await createTestDirectory('core-versions-page'),
       );
+      if (installed) {
+        final directory = storage.versionDirectory('v26.11.9-42');
+        await directory.create(recursive: true);
+        await storage.writeManifest(
+          directory,
+          CoreVersionManifest(
+            releaseTag: 'v26.11.9',
+            assetId: 42,
+            assetName: _linuxAsset,
+            assetSize: 1234,
+            expectedSha256: 'a' * 64,
+            installedSha256: 'b' * 64,
+            platform: 'linux',
+            abi: 'x64',
+            installedAt: DateTime.utc(2026, 11, 10),
+            installDir: directory.path,
+          ),
+        );
+      }
       controller = CoreVersionsController(
         service: CoreVersionService(
           openStorage: () async => storage,
@@ -84,6 +107,8 @@ void main() {
               : const CoreDownloadCapability.disabled(
                   CoreDownloadUnavailableReason.androidPlayDistribution,
                 ),
+          readCurrentRuntime: readCurrentRuntime ?? (() async => null),
+          disconnect: disconnect ?? (() async {}),
           catalogAssetName: () => _linuxAsset,
           catalogRequest: (uri, headers) async =>
               (statusCode: 200, etag: '"page"', body: githubBody()),
@@ -185,4 +210,27 @@ void main() {
     // Bundled still owns the Active mark; the installed row offers Activate.
     expect(find.text(l.coreVersionsActive), findsOneWidget);
   });
+
+  testWidgets('Activate asks before stopping a live connection', (
+    tester,
+  ) async {
+    final controller = await buildController(
+      tester,
+      enabled: true,
+      installed: true,
+      readCurrentRuntime: () async => _ActiveRuntime(),
+    );
+    final l = await pumpPage(tester, controller);
+
+    await tester.tap(find.byTooltip(l.coreVersionsActivate));
+    await tester.pumpAndSettle();
+    expect(find.text(l.coreVersionsSwitchQuestion), findsOneWidget);
+
+    await tester.tap(find.text(l.prototypeCancel));
+    await tester.pumpAndSettle();
+    // Cancelling leaves the bundled selection untouched.
+    expect(controller.state.activeInstallationId, isNull);
+  });
 }
+
+class _ActiveRuntime extends Fake implements ConnectionRuntime {}

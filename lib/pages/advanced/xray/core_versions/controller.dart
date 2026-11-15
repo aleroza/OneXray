@@ -26,6 +26,7 @@ class CoreVersionsPageState {
   final bool loading;
   final bool failed;
   final Object? failure;
+  final bool selectedUnavailable;
   final String? downloadingTag;
   final double? downloadProgress;
   final bool verifying;
@@ -46,6 +47,7 @@ class CoreVersionsPageState {
     this.loading = true,
     this.failed = false,
     this.failure,
+    this.selectedUnavailable = false,
     this.downloadingTag,
     this.downloadProgress,
     this.verifying = false,
@@ -83,6 +85,7 @@ class CoreVersionsPageState {
     bool? loading,
     bool? failed,
     Object? failure,
+    bool? selectedUnavailable,
     Object? downloadingTag = _notProvided,
     Object? downloadProgress = _notProvided,
     bool? verifying,
@@ -106,6 +109,7 @@ class CoreVersionsPageState {
     loading: loading ?? this.loading,
     failed: failed ?? this.failed,
     failure: failed == false ? null : failure ?? this.failure,
+    selectedUnavailable: selectedUnavailable ?? this.selectedUnavailable,
     downloadingTag: identical(downloadingTag, _notProvided)
         ? this.downloadingTag
         : downloadingTag as String?,
@@ -121,8 +125,9 @@ class CoreVersionsPageState {
 
 /// Drives the core version screen: what this build may do, what is
 /// installed, what the catalog offers, and the one selected version.
-/// Nothing here starts or stops the core; the selection applies on the next
-/// connection, exactly like the bundled core.
+/// Activating a downloaded version first stops the running connection so
+/// the selected core starts on the next connect; returning to bundled only
+/// changes the saved preference.
 class CoreVersionsController extends PageCubit<CoreVersionsPageState> {
   CoreVersionsController({
     CoreVersionService? service,
@@ -257,6 +262,10 @@ class CoreVersionsController extends PageCubit<CoreVersionsPageState> {
 
   Future<void> returnToBundled(BuildContext context) => _select(context, null);
 
+  /// The page asks before switching so the user confirms stopping the
+  /// running connection; the service performs the actual disconnect.
+  Future<bool> isConnectionActive() => service.isConnectionActive();
+
   Future<void> _select(BuildContext context, String? installationId) async {
     final key = installationId ?? bundledErrorKey;
     final busy =
@@ -269,13 +278,15 @@ class CoreVersionsController extends PageCubit<CoreVersionsPageState> {
     _setError(key, null);
     emit(state.copyWith(activating: {...state.activating, key}));
     try {
-      await service.select(installationId);
+      await service.activate(installationId);
       await _refreshSelection();
+      if (installationId != null && context.mounted) {
+        _message(context, l.coreVersionsVersionApplied);
+      }
     } catch (error) {
-      _setError(
-        key,
-        appFailureMessage(l, error, operation: l.coreVersionsActivateError),
-      );
+      _setError(key, coreVersionFailureMessage(l, error));
+      // A failed disconnect still saved the selection; show the truth.
+      await _refreshSelection();
     } finally {
       final activating = {...state.activating}..remove(key);
       if (isPageActive) emit(state.copyWith(activating: activating));
@@ -300,8 +311,20 @@ class CoreVersionsController extends PageCubit<CoreVersionsPageState> {
   Future<void> _refreshSelection() async {
     final installed = await service.installed();
     final active = await service.activeInstallationId();
+    var unavailable = false;
+    if (active != null) {
+      // The selection survives a broken installation; the screen and the
+      // launch paths both fall back to the bundled core honestly.
+      unavailable = await service.activeExecutablePath() == null;
+    }
     if (isPageActive) {
-      emit(state.copyWith(installed: installed, activeInstallationId: active));
+      emit(
+        state.copyWith(
+          installed: installed,
+          activeInstallationId: active,
+          selectedUnavailable: unavailable,
+        ),
+      );
     }
   }
 
@@ -315,6 +338,9 @@ class CoreVersionsController extends PageCubit<CoreVersionsPageState> {
     }
     emit(state.copyWith(errors: errors));
   }
+
+  static void _message(BuildContext context, String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   static const bundledErrorKey = 'bundled';
 }
@@ -331,6 +357,8 @@ String coreVersionFailureMessage(AppLocalizations l, Object? error) {
         return l.coreVersionsDeleteActiveError;
       case 'catalogUnavailable':
         return l.coreVersionsCatalogOffline;
+      case 'coreVersionsDisconnectFailed':
+        return l.coreVersionsDisconnectError;
       case 'coreAssetDigestMissing':
       case 'coreArchiveUnexpectedContent':
       case 'coreArchiveInvalid':

@@ -14,6 +14,7 @@ import 'package:onexray/pages/advanced/xray/core_versions/controller.dart';
 import 'package:onexray/pages/theme/theme.dart';
 import 'package:onexray/service/advanced/xray/core_version/service.dart';
 import 'package:onexray/service/advanced/xray/core_version/storage.dart';
+import 'package:onexray/service/connect/runtime.dart';
 import 'package:onexray/service/settings/language/locale.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -56,7 +57,7 @@ Widget screen(Widget child) => MaterialApp(
   supportedLocales: AppLocalizations.supportedLocales,
   builder: (_, child) =>
       ShadTheme(data: AppTheme.shad(Brightness.light), child: child!),
-  home: child,
+  home: Scaffold(body: child),
 );
 
 void main() {
@@ -96,6 +97,8 @@ void main() {
     bool enabled = true,
     String? digest,
     bool failTransport = false,
+    Future<ConnectionRuntime?> Function()? readCurrentRuntime,
+    Future<void> Function()? disconnect,
   }) => CoreVersionService(
     openStorage: () async => storage,
     capability: () => enabled
@@ -107,6 +110,8 @@ void main() {
         : const CoreDownloadCapability.disabled(
             CoreDownloadUnavailableReason.buildDisabled,
           ),
+    readCurrentRuntime: readCurrentRuntime ?? (() async => null),
+    disconnect: disconnect ?? (() async {}),
     catalogAssetName: () => _linuxAsset,
     catalogRequest: (uri, headers) async {
       if (transportFailures > 0) {
@@ -126,16 +131,20 @@ void main() {
     },
   );
 
-  CoreVersionsController controllerFor({bool enabled = true, String? digest}) =>
-      CoreVersionsController(
-        service: serviceFor(enabled: enabled, digest: digest),
-        bundledVersion: () async => 'Xray 26.11.9',
-      );
+  CoreVersionsController controllerFor({
+    bool enabled = true,
+    String? digest,
+    CoreVersionService? service,
+  }) => CoreVersionsController(
+    service: service ?? serviceFor(enabled: enabled, digest: digest),
+    bundledVersion: () async => 'Xray 26.11.9',
+  );
 
   Future<(CoreVersionsController, BuildContext, AppLocalizations)> pumpScreen(
     WidgetTester tester, {
     bool enabled = true,
     String? digest,
+    CoreVersionService? service,
   }) async {
     BuildContext? captured;
     await tester.pumpWidget(
@@ -152,7 +161,11 @@ void main() {
     // controller is created inside runAsync together with its load().
     late CoreVersionsController controller;
     await tester.runAsync(() async {
-      controller = controllerFor(enabled: enabled, digest: digest);
+      controller = controllerFor(
+        enabled: enabled,
+        digest: digest,
+        service: service,
+      );
       addTearDown(controller.close);
       await settled(controller);
     });
@@ -220,7 +233,7 @@ void main() {
   testWidgets('download verifies and publishes, then Activate selects', (
     tester,
   ) async {
-    final (controller, context, _) = await pumpScreen(tester);
+    final (controller, context, l) = await pumpScreen(tester);
 
     await tester.runAsync(() async {
       await settled(controller);
@@ -235,7 +248,12 @@ void main() {
       await controller.activate(context, 'v26.11.9-42');
       expect(controller.state.activeInstallationId, 'v26.11.9-42');
       expect(controller.state.bundledActive, isFalse);
-
+    });
+    // Drain the applied-version snackbar animations and assert its copy.
+    await tester.pump();
+    expect(find.text(l.coreVersionsVersionApplied), findsOneWidget);
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
       await controller.returnToBundled(context);
       expect(controller.state.activeInstallationId, isNull);
       expect(controller.state.bundledActive, isTrue);
@@ -270,6 +288,7 @@ void main() {
       expect(controller.state.installed, isEmpty);
       expect(controller.state.errors, isEmpty);
     });
+    await tester.pumpAndSettle();
   });
 
   testWidgets('failure codes map to the approved screen copy', (tester) async {
@@ -313,5 +332,67 @@ void main() {
       ),
       localization.coreVersionsInstallError,
     );
+    expect(
+      coreVersionFailureMessage(
+        localization,
+        const AppFailure(
+          FailureCategory.runtime,
+          'coreVersionsDisconnectFailed',
+        ),
+      ),
+      localization.coreVersionsDisconnectError,
+    );
+  });
+
+  testWidgets('a disconnect failure is reported while the selection lands', (
+    tester,
+  ) async {
+    final (controller, context, l) = await pumpScreen(
+      tester,
+      service: serviceFor(
+        readCurrentRuntime: () async => _ActiveRuntime(),
+        disconnect: () async => throw StateError('coordinator down'),
+      ),
+    );
+
+    await tester.runAsync(() async {
+      await settled(controller);
+      await controller.download(context, releaseOf());
+      expect(await controller.isConnectionActive(), isTrue);
+
+      await controller.activate(context, 'v26.11.9-42');
+
+      expect(
+        controller.state.errors['v26.11.9-42'],
+        l.coreVersionsDisconnectError,
+      );
+      expect(controller.state.activeInstallationId, 'v26.11.9-42');
+    });
+  });
+
+  testWidgets('a lost installation stays selected but reports bundled use', (
+    tester,
+  ) async {
+    final (controller, context, _) = await pumpScreen(tester);
+
+    await tester.runAsync(() async {
+      await settled(controller);
+      await controller.download(context, releaseOf());
+      await controller.activate(context, 'v26.11.9-42');
+      expect(controller.state.selectedUnavailable, isFalse);
+
+      await storage.versionDirectory('v26.11.9-42').delete(recursive: true);
+      await controller.load();
+
+      expect(controller.state.selectedUnavailable, isTrue);
+      expect(controller.state.activeInstallationId, 'v26.11.9-42');
+
+      await controller.returnToBundled(context);
+      expect(controller.state.selectedUnavailable, isFalse);
+      expect(await controller.isConnectionActive(), isFalse);
+    });
+    await tester.pumpAndSettle();
   });
 }
+
+class _ActiveRuntime extends Fake implements ConnectionRuntime {}

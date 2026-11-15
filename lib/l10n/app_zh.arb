@@ -1057,5 +1057,9 @@
   "coreVersionsIntegrityError": "下载的文件与发布的摘要不一致。",
   "coreVersionsInstallError": "无法安装该内核版本。",
   "coreVersionsActivateError": "无法启用该内核版本。",
+  "coreVersionsSwitchQuestion": "当前连接将被断开。",
+  "coreVersionsVersionApplied": "新连接将使用所选内核版本。",
+  "coreVersionsSelectedUnavailable": "所选版本不可用；正在使用内置版本。",
+  "coreVersionsDisconnectError": "切换前无法停止连接。",
   "coreVersionsDeleteActiveError": "无法删除当前使用的内核版本。"
 }

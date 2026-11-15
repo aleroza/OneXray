@@ -139,26 +139,37 @@ class CoreVersionsPage extends StatelessWidget {
     CoreVersionsPageState state,
   ) {
     final l = AppLocalizations.of(context)!;
-    return SettingSection(
-      title: l.coreVersionsInstalledSection,
-      icon: LucideIcons.download,
-      padding: EdgeInsets.zero,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 12,
       children: [
-        if (state.installed.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              l.coreVersionsNoInstalled,
-              style: AppTypography.supporting.copyWith(
-                color: ColorManager.palette(context).mutedForeground,
-              ),
-            ),
+        if (state.selectedUnavailable)
+          ShadAlert(
+            icon: const Icon(LucideIcons.triangleAlert, size: 19),
+            description: Text(l.coreVersionsSelectedUnavailable),
           ),
-        for (final entry in state.installed)
-          _installedRow(context, controller, state, entry),
-        for (final entry in state.installed)
-          if (state.errors[entry.installationId] != null)
-            _error(context, state.errors[entry.installationId]!),
+        SettingSection(
+          title: l.coreVersionsInstalledSection,
+          icon: LucideIcons.download,
+          padding: EdgeInsets.zero,
+          children: [
+            if (state.installed.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  l.coreVersionsNoInstalled,
+                  style: AppTypography.supporting.copyWith(
+                    color: ColorManager.palette(context).mutedForeground,
+                  ),
+                ),
+              ),
+            for (final entry in state.installed)
+              _installedRow(context, controller, state, entry),
+            for (final entry in state.installed)
+              if (state.errors[entry.installationId] != null)
+                _error(context, state.errors[entry.installationId]!),
+          ],
+        ),
       ],
     );
   }
@@ -172,11 +183,14 @@ class CoreVersionsPage extends StatelessWidget {
     final l = AppLocalizations.of(context)!;
     final id = entry.installationId;
     final active = state.activeInstallationId == id;
+    final unavailable = active && state.selectedUnavailable;
     final busy = state.operationBusy(id);
     return SettingRow(
       title: entry.manifest.releaseTag,
       titleTextDirection: TextDirection.ltr,
-      subtitle: entry.manifest.installedSha256 == null
+      subtitle: unavailable
+          ? l.coreVersionsSelectedUnavailable
+          : entry.manifest.installedSha256 == null
           ? null
           : l.coreVersionsVerified,
       titleTrailing: active ? _activeChip(context, l.coreVersionsActive) : null,
@@ -186,7 +200,9 @@ class CoreVersionsPage extends StatelessWidget {
           if (!active)
             IconButton(
               tooltip: l.coreVersionsActivate,
-              onPressed: busy ? null : () => controller.activate(context, id),
+              onPressed: busy
+                  ? null
+                  : () => _confirmSwitch(context, controller, id),
               icon: state.activating.contains(id)
                   ? const ButtonProgressIndicator(size: 15)
                   : const Icon(LucideIcons.check, size: 18),
@@ -294,6 +310,47 @@ class CoreVersionsPage extends StatelessWidget {
             : const Icon(LucideIcons.download, size: 18),
       ),
     );
+  }
+
+  /// Switching a running connection needs consent: the service stops the
+  /// current core before applying the new selection.
+  Future<void> _confirmSwitch(
+    BuildContext context,
+    CoreVersionsController controller,
+    String installationId,
+  ) async {
+    final l = AppLocalizations.of(context)!;
+    if (await controller.isConnectionActive()) {
+      if (!context.mounted) return;
+      final confirmed = await showAppDialog<bool>(
+        context,
+        (dialogContext) => AppDialog(
+          title: l.coreVersionsActivate,
+          subtitle: installationId,
+          expandLastAction: false,
+          body: ConnectCallout(
+            icon: LucideIcons.triangleAlert,
+            text: l.coreVersionsSwitchQuestion,
+            warning: true,
+          ),
+          actions: [
+            ConnectDialogButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              label: l.prototypeCancel,
+              secondary: true,
+            ),
+            ConnectDialogButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              label: l.coreVersionsActivate,
+              icon: LucideIcons.check,
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    if (!context.mounted) return;
+    await controller.activate(context, installationId);
   }
 
   Future<void> _confirmDelete(

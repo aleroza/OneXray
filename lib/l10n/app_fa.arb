@@ -1057,5 +1057,9 @@
   "coreVersionsIntegrityError": "فایل دانلودشده با اثر انگشت منتشرشده مطابقت ندارد.",
   "coreVersionsInstallError": "نصب این نسخهٔ هسته انجام نشد.",
   "coreVersionsActivateError": "فعال کردن این نسخهٔ هسته انجام نشد.",
+  "coreVersionsSwitchQuestion": "اتصال فعلی قطع خواهد شد.",
+  "coreVersionsVersionApplied": "نسخهٔ انتخابی هسته برای اتصال‌های جدید استفاده می‌شود.",
+  "coreVersionsSelectedUnavailable": "نسخهٔ انتخابی در دسترس نیست؛ نسخهٔ همراه برنامه استفاده می‌شود.",
+  "coreVersionsDisconnectError": "قبل از تغییر، اتصال متوقف نشد.",
   "coreVersionsDeleteActiveError": "نسخهٔ فعال هسته را نمی‌توان حذف کرد."
 }

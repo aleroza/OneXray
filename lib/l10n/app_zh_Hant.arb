@@ -1057,5 +1057,9 @@
   "coreVersionsIntegrityError": "下載的檔案與發布的摘要不一致。",
   "coreVersionsInstallError": "無法安裝該核心版本。",
   "coreVersionsActivateError": "無法啟用該核心版本。",
+  "coreVersionsSwitchQuestion": "目前連線將被中斷。",
+  "coreVersionsVersionApplied": "新連線將使用所選核心版本。",
+  "coreVersionsSelectedUnavailable": "所選版本無法使用；正在使用內建版本。",
+  "coreVersionsDisconnectError": "切換前無法停止連線。",
   "coreVersionsDeleteActiveError": "無法刪除目前使用的核心版本。"
 }

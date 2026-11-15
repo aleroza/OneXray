@@ -3034,5 +3034,9 @@
   "coreVersionsIntegrityError": "The downloaded file did not match its published digest.",
   "coreVersionsInstallError": "The core version could not be installed.",
   "coreVersionsActivateError": "The core version could not be activated.",
+  "coreVersionsSwitchQuestion": "The current connection will be disconnected.",
+  "coreVersionsVersionApplied": "The selected core version will be used for new connections.",
+  "coreVersionsSelectedUnavailable": "The selected version is unavailable; the bundled core is used.",
+  "coreVersionsDisconnectError": "The connection could not be stopped before switching.",
   "coreVersionsDeleteActiveError": "The active core version cannot be deleted."
 }

@@ -1057,5 +1057,9 @@
   "coreVersionsIntegrityError": "Загруженный файл не совпал с опубликованной контрольной суммой.",
   "coreVersionsInstallError": "Не удалось установить версию ядра.",
   "coreVersionsActivateError": "Не удалось активировать версию ядра.",
+  "coreVersionsSwitchQuestion": "Текущее соединение будет отключено.",
+  "coreVersionsVersionApplied": "Выбранная версия ядра будет использоваться для новых соединений.",
+  "coreVersionsSelectedUnavailable": "Выбранная версия недоступна; используется встроенная.",
+  "coreVersionsDisconnectError": "Не удалось отключить соединение перед переключением.",
   "coreVersionsDeleteActiveError": "Нельзя удалить активную версию ядра."
 }
