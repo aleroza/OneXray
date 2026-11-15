@@ -85,4 +85,13 @@ void main() {
       expect(await storage.getBool('privacyAccepted04'), isTrue);
     },
   );
+
+  test('active core version reads back and clears when set to null', () async {
+    final preferences = PreferencesKey();
+    expect(await preferences.readActiveCoreVersion(), isNull);
+    await preferences.saveActiveCoreVersion('v26.11.9-42');
+    expect(await preferences.readActiveCoreVersion(), 'v26.11.9-42');
+    await preferences.saveActiveCoreVersion(null);
+    expect(await preferences.readActiveCoreVersion(), isNull);
+  });
 }

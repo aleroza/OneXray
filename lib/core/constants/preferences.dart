@@ -186,6 +186,21 @@ class PreferencesKey {
     await _prefs.setString(_languageCode, value);
   }
 
+  static const _activeCoreVersion = '${_namespace}activeCoreVersion';
+
+  /// A missing or unknown value means "use the bundled core"; consumers of
+  /// this key must keep that fallback.
+  Future<String?> readActiveCoreVersion() =>
+      _prefs.getString(_activeCoreVersion);
+
+  Future<void> saveActiveCoreVersion(String? value) async {
+    if (value == null) {
+      await _prefs.remove(_activeCoreVersion);
+    } else {
+      await _prefs.setString(_activeCoreVersion, value);
+    }
+  }
+
   static const _serverSort = '${_namespace}serverSort';
 
   Future<String?> readServerSort() => _prefs.getString(_serverSort);
