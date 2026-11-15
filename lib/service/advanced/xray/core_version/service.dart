@@ -2,6 +2,8 @@ import 'package:onexray/core/constants/preferences.dart';
 import 'package:onexray/core/errors/failure.dart';
 import 'package:onexray/core/model/core_download_capability.dart';
 import 'package:onexray/core/model/core_release.dart';
+import 'package:onexray/core/model/core_library_compatibility.dart';
+import 'package:onexray/service/advanced/xray/core_version/android_core.dart';
 import 'package:onexray/service/advanced/xray/core_version/catalog.dart';
 import 'package:onexray/service/advanced/xray/core_version/capability.dart';
 import 'package:onexray/service/advanced/xray/core_version/executable.dart';
@@ -21,6 +23,7 @@ final class CoreVersionService {
   final String? Function()? catalogAssetName;
   final CoreCatalogRequest? catalogRequest;
   final CoreAssetDownload? assetDownload;
+  final AndroidCoreService? androidCore;
 
   CoreVersionService({
     Future<CoreVersionStorage> Function()? openStorage,
@@ -30,6 +33,7 @@ final class CoreVersionService {
     this.catalogAssetName,
     this.catalogRequest,
     this.assetDownload,
+    this.androidCore,
   }) : _openStorage = openStorage ?? CoreVersionStorage.open,
        _capability = capability ?? CoreDownloadCapabilityService.evaluate;
 
@@ -77,10 +81,40 @@ final class CoreVersionService {
         cause: 'Release ${release.tag} carries no ${current.assetName} asset',
       );
     }
-    return CoreInstaller(
+    final manifest = await CoreInstaller(
       storage: await _openStorage(),
       download: assetDownload,
     ).install(release, asset, onProgress: onProgress);
+    return _publishAndroidLibrary(manifest);
+  }
+
+  /// Publishes the native library of an Android release and records what it
+  /// offers compared to the JNI contract the App links against. Other
+  /// platforms have no native library to publish.
+  Future<CoreVersionManifest> _publishAndroidLibrary(
+    CoreVersionManifest manifest,
+  ) async {
+    final android = androidCore ?? AndroidCoreService();
+    try {
+      final library = await android.publishInstalledLibrary(manifest);
+      if (library == null) {
+        return manifest;
+      }
+      final updated = manifest.copyWith(
+        libraryPath: library.path,
+        compatibility: library.check.compatibility.name,
+        missingSymbols: library.check.missingSymbols,
+      );
+      final storage = await _openStorage();
+      final installationId = updated.installDir.split('/').last;
+      await storage.writeManifest(
+        storage.versionDirectory(installationId),
+        updated,
+      );
+      return updated;
+    } catch (_) {
+      return manifest;
+    }
   }
 
   Future<String?> activeInstallationId() =>
@@ -137,12 +171,18 @@ final class CoreVersionService {
   /// the new core actually starts; the selection is saved even when stopping
   /// fails, and the failure is then reported to the caller.
   Future<void> activate(String? installationId) async {
+    final android = androidCore ?? AndroidCoreService();
     if (installationId == null) {
       await select(null);
+      await _announceLibrary(android, null);
       return;
     }
     final disconnectFailure = await disconnectActiveConnection();
     await select(installationId);
+    await _announceLibrary(
+      android,
+      await _libraryPathOf(installationId),
+    );
     if (disconnectFailure != null) {
       throw AppFailure(
         FailureCategory.runtime,
@@ -150,6 +190,29 @@ final class CoreVersionService {
         cause: disconnectFailure,
       );
     }
+  }
+
+  /// Tells the native side which library the runtime should load. The
+  /// announcement is best effort: when it fails the runtime keeps the
+  /// bundled core, which is the safe fallback.
+  Future<void> _announceLibrary(
+    AndroidCoreService android,
+    String? libraryPath,
+  ) async {
+    try {
+      await android.selectLibrary(libraryPath);
+    } catch (_) {}
+  }
+
+  /// The published native library of an installed version, if it has one.
+  Future<String?> _libraryPathOf(String installationId) async {
+    final installed = await (await _openStorage()).listInstalled();
+    for (final entry in installed) {
+      if (entry.installationId == installationId) {
+        return entry.manifest.libraryPath;
+      }
+    }
+    return null;
   }
 
   Future<void> remove(String installationId) async {
@@ -164,4 +227,21 @@ final class CoreVersionService {
   }
 
   Future<void> clearSelection() => select(null);
+
+  /// What the published library of an installed version offers compared to
+  /// the JNI contract the App links against.
+  CoreLibraryCheck? compatibilityOf(CoreInstalledVersion installed) {
+    final compatibility = installed.manifest.compatibility;
+    if (compatibility == null) {
+      return null;
+    }
+    final verdict = CoreLibraryCompatibility.values.firstWhere(
+      (value) => value.name == compatibility,
+      orElse: () => CoreLibraryCompatibility.fatal,
+    );
+    return CoreLibraryCheck(
+      compatibility: verdict,
+      missingSymbols: installed.manifest.missingSymbols,
+    );
+  }
 }

@@ -23,6 +23,17 @@ final class CoreVersionManifest {
   final DateTime installedAt;
   final String installDir;
 
+  /// The published native library of an Android release, relative to the app
+  /// files directory.
+  final String? libraryPath;
+
+  /// What the published library offers compared to the JNI contract the App
+  /// links against: compatible, warning or fatal.
+  final String? compatibility;
+
+  /// The JNI entries a published library does not export.
+  final List<String> missingSymbols;
+
   const CoreVersionManifest({
     required this.releaseTag,
     required this.assetId,
@@ -34,7 +45,31 @@ final class CoreVersionManifest {
     required this.abi,
     required this.installedAt,
     required this.installDir,
+    this.libraryPath,
+    this.compatibility,
+    this.missingSymbols = const [],
   });
+
+  /// The same manifest with the published library details filled in.
+  CoreVersionManifest copyWith({
+    String? libraryPath,
+    String? compatibility,
+    List<String>? missingSymbols,
+  }) => CoreVersionManifest(
+    releaseTag: releaseTag,
+    assetId: assetId,
+    assetName: assetName,
+    assetSize: assetSize,
+    expectedSha256: expectedSha256,
+    installedSha256: installedSha256,
+    platform: platform,
+    abi: abi,
+    installedAt: installedAt,
+    installDir: installDir,
+    libraryPath: libraryPath ?? this.libraryPath,
+    compatibility: compatibility ?? this.compatibility,
+    missingSymbols: missingSymbols ?? this.missingSymbols,
+  );
 
   /// Manifests that do not match this schema return null; one damaged file
   /// must not hide the other installed versions.
@@ -49,6 +84,9 @@ final class CoreVersionManifest {
     final abi = json['abi'];
     final installedAt = json['installedAt'];
     final installDir = json['installDir'];
+    final libraryPath = json['libraryPath'];
+    final compatibility = json['compatibility'];
+    final missingSymbols = json['missingSymbols'];
     if (releaseTag is! String ||
         releaseTag.isEmpty ||
         assetId is! int ||
@@ -80,6 +118,11 @@ final class CoreVersionManifest {
       abi: abi is String ? abi : null,
       installedAt: installed,
       installDir: installDir,
+      libraryPath: libraryPath is String ? libraryPath : null,
+      compatibility: compatibility is String ? compatibility : null,
+      missingSymbols: missingSymbols is List
+          ? missingSymbols.whereType<String>().toList(growable: false)
+          : const [],
     );
   }
 
@@ -94,6 +137,9 @@ final class CoreVersionManifest {
     'abi': abi,
     'installedAt': installedAt.toIso8601String(),
     'installDir': installDir,
+    'libraryPath': libraryPath,
+    'compatibility': compatibility,
+    'missingSymbols': missingSymbols,
   };
 }
 
