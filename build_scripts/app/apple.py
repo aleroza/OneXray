@@ -11,12 +11,7 @@ class AppleBuilder(Builder):
         )
 
     def build_app(self):
-        # Apple ships the code-signed bundled xcframework, so downloads stay
-        # off. The Dart default is false already; the environment pin records
-        # the channel and takes effect once the shared Fastfiles forward it
-        # into `flutter build` as --dart-define.
-        run_command(
-            ["fastlane", "deploy", "--verbose"],
-            cwd=self.project_dir,
-            env={"ONEXRAY_CORE_DOWNLOADS": "false"},
-        )
+        # Apple always ships the code-signed static xcframework, which cannot
+        # be replaced at runtime; ONEXRAY_CORE_DOWNLOADS therefore keeps its
+        # Dart default of false for every Apple build.
+        run_command(["fastlane", "deploy", "--verbose"], cwd=self.project_dir)

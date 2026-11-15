@@ -152,12 +152,14 @@ class CoreDownloadsChannelTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"ONEXRAY_WINDOWS_ARCH": "x64"}):
             return WindowsBuilder("OneXray", "windows", self.scripts(), mode=mode)
 
-    def test_apple_pins_downloads_off(self):
+    def test_apple_uses_the_default_off_without_the_ineffective_env_pin(self):
         builder = AppleBuilder("OneXray", "macos", self.scripts())
         with mock.patch("app.apple.run_command") as run:
             builder.build_app()
         self.assertEqual(run.call_args.args[0][:2], ["fastlane", "deploy"])
-        self.assertEqual(run.call_args.kwargs["env"], {"ONEXRAY_CORE_DOWNLOADS": "false"})
+        # Apple keeps the Dart default false; an environment entry would not
+        # reach flutter build as a --dart-define, so none is passed.
+        self.assertNotIn("env", run.call_args.kwargs)
 
 
 if __name__ == "__main__":
