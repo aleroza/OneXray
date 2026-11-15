@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:onexray/core/system_proxy/linux_backend.dart';
+import 'package:onexray/core/system_proxy/macos_backend.dart';
 import 'package:onexray/core/system_proxy/system_proxy_models.dart';
 
 /// A platform-specific way to read, change and roll back the OS proxy.
@@ -35,5 +36,6 @@ abstract interface class SystemProxyBackend {
 /// proxy to manage (Android/iOS and unknown systems).
 SystemProxyBackend? defaultSystemProxyBackend() {
   if (Platform.isLinux) return LinuxSystemProxyBackend();
+  if (Platform.isMacOS) return MacSystemProxyBackend();
   return null;
 }
