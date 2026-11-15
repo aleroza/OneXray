@@ -357,6 +357,23 @@ void main() {
         reason: 'the snapshot survives for a later byte-for-byte restore');
   });
 
+  test('a failing apply still knows the port to disable', () async {
+    // The apply writes part of its plan and then fails; the port must have
+    // been remembered before backend.apply started, or a later remove()
+    // with an unreadable snapshot could not switch the proxy off.
+    backend.failure = const SystemProxyFailure('half written');
+    expect(await service.apply(10808), contains('half written'));
+    backend.failure = null;
+    await File('${directory.path}/system-proxy-snapshot.json')
+        .writeAsString('{ not json');
+
+    final reason = await service.remove();
+
+    expect(reason, isNotNull);
+    expect(backend.disabledPort, 10808,
+        reason: 'the port was captured before the failing backend.apply');
+  });
+
   test('a failing restore disables the port and keeps the snapshot',
       () async {
     expect(await service.apply(10808), isNull);

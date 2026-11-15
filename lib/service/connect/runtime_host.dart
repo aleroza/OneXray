@@ -402,6 +402,9 @@ class ConnectionRuntimeHost {
         }
       } catch (error, stackTrace) {
         ygLogger('Apply system proxy failed: $error\n$stackTrace');
+        // A thrown apply can also have written part of the plan, so the
+        // same rollback the reported-reason branch runs applies here too.
+        await _revertSystemProxyIntent?.call();
       }
     }
     return HostConnection(

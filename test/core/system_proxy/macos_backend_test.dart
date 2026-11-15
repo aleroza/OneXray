@@ -6,10 +6,13 @@ import 'package:onexray/core/system_proxy/system_proxy_models.dart';
 const _tool = '/usr/sbin/networksetup';
 
 class _FakeOs {
-  _FakeOs(this.reads);
+  _FakeOs(this.reads, {this.refuses = const {}});
 
   /// Responses keyed by the joined arguments, e.g. `-getwebproxy Wi-Fi`.
   final Map<String, String> reads;
+
+  /// Joined arguments the tool rejects with a non-zero exit code.
+  final Set<String> refuses;
   final commands = <String>[];
 
   Future<SystemProxyCommandResult> call(
@@ -27,6 +30,12 @@ class _FakeOs {
       return const SystemProxyCommandResult(
         exitCode: 1,
         errorText: 'unscripted read',
+      );
+    }
+    if (refuses.contains(line)) {
+      return const SystemProxyCommandResult(
+        exitCode: 1,
+        errorText: 'Expected a hostname.',
       );
     }
     return const SystemProxyCommandResult(exitCode: 0);
@@ -154,12 +163,42 @@ void main() {
       expected.addAll([
         '$_tool -setwebproxy $service proxy.example 3128',
         '$_tool -setwebproxystate $service on',
+        // The kinds with an empty capture get their captured empty values
+        // written back so our endpoint cannot survive inside the config.
+        '$_tool -setsecurewebproxy $service  0',
         '$_tool -setsecurewebproxystate $service off',
+        '$_tool -setsocksfirewallproxy $service  0',
         '$_tool -setsocksfirewallproxystate $service off',
         '$_tool -setproxybypassdomains $service *.internal',
       ]);
     }
     expect(os.commands, expected);
+  });
+
+  test('a rejected empty-value reset still switches the state off', () async {
+    final os = _FakeOs(_network(), refuses: {'-setwebproxy Wi-Fi  0'});
+    final proxy = _backend(os);
+    final snapshot = await proxy.read();
+    await proxy.apply(port: 10808, before: snapshot);
+    os.commands.clear();
+
+    // networksetup may reject the empty server; that is tolerated, and the
+    // state goes off so a leftover endpoint can never be used.
+    await proxy.restore(snapshot);
+
+    expect(
+      os.commands.where(
+        (line) =>
+            line.contains(' Wi-Fi') &&
+            !line.contains('secureweb') &&
+            !line.contains('socksfirewall') &&
+            !line.contains('bypassdomains'),
+      ),
+      [
+        '$_tool -setwebproxy Wi-Fi  0',
+        '$_tool -setwebproxystate Wi-Fi off',
+      ],
+    );
   });
 
   test('a configured but disabled proxy keeps its server and stays off',

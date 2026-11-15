@@ -56,6 +56,9 @@ final class LinuxSystemProxyBackend implements SystemProxyBackend {
     'mode': ('', 'mode'),
   };
 
+  /// Snapshot keys in restore order. `ProxyType` is written or deleted last,
+  /// like GNOME's `mode`, so the proxy never stays enabled over half-restored
+  /// values.
   static const _kdeKeys = [
     'httpProxy',
     'httpsProxy',
@@ -158,13 +161,31 @@ final class LinuxSystemProxyBackend implements SystemProxyBackend {
     final tool = await _kdeWriteTool(target);
     final commands = <SystemProxyCommand>[];
     for (final key in _kdeKeys) {
-      // A key the user never had is written as empty: kwriteconfig cannot
-      // remove entries, and ProxyType falls back to 0 (proxy off).
-      final raw = snapshot.values[key] ?? (key == 'ProxyType' ? '0' : '');
-      commands.addAll(_kdeSetCommands(tool, key, raw));
+      final value = snapshot.values[key];
+      if (value == null) {
+        // A key the user never had is deleted again, not written as an empty
+        // string: kwriteconfig --delete removes it, which is the byte-for-
+        // byte original state. ProxyType stays last in _kdeKeys, so the
+        // enable switch (or its deletion) is always the final write.
+        commands.add(_kdeDeleteCommand(tool, key));
+      } else {
+        commands.addAll(_kdeSetCommands(tool, key, value));
+      }
     }
     commands.add(_kdeReparseCommand());
     await runSystemProxyCommands(_run, commands);
+  }
+
+  SystemProxyCommand _kdeDeleteCommand(String tool, String key) {
+    return SystemProxyCommand(tool, [
+      '--file',
+      _kioFile(),
+      '--group',
+      'Proxy Settings',
+      '--key',
+      key,
+      '--delete',
+    ]);
   }
 
   SystemProxyCommand _kdeReparseCommand() => SystemProxyCommand(

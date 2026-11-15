@@ -757,6 +757,23 @@ void main() {
 
       expect(events, ['revert']);
     });
+
+    test('a thrown apply error also reverts the stored intent', () async {
+      final events = <String>[];
+      final host = ConnectionRuntimeHost(
+        startVpn: (_) async => NativeVpnCommandResult(
+          state: NativeVpnCommandState.success,
+          status: VpnStatus.connected,
+        ),
+        applySystemProxy: (_) async => throw StateError('channel exploded'),
+        revertSystemProxyIntent: () async => events.add('revert'),
+      );
+
+      // A half-written apply can throw just as well as report a reason.
+      await confirmStart(host, _runtime(policy: proxyPolicy));
+
+      expect(events, ['revert']);
+    });
   });
 }
 

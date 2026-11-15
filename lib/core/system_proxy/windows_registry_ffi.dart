@@ -174,34 +174,45 @@ final class WindowsRegistryFfi implements WindowsRegistryAccess {
       if (byteCount.value == 0) {
         return (text: type.value == regSz ? '' : null, number: null);
       }
-      final buffer = calloc<Uint8>(byteCount.value);
-      try {
-        status = _queryValue(
-          key,
-          namePointer,
-          nullptr,
-          type,
-          buffer,
-          byteCount,
-        );
-        if (status == errorFileNotFound) return null;
-        if (status != errorSuccess) {
-          throw SystemProxyFailure(
-            'RegQueryValueExW $name failed with status $status',
+      // The value may grow between the size probe and the read; Win32 then
+      // answers ERROR_MORE_DATA and reports the new required size, so retry
+      // with a bigger buffer a bounded number of times.
+      var size = byteCount.value;
+      for (var attempt = 0; ; attempt++) {
+        final buffer = calloc<Uint8>(size);
+        try {
+          byteCount.value = size;
+          status = _queryValue(
+            key,
+            namePointer,
+            nullptr,
+            type,
+            buffer,
+            byteCount,
           );
+          if (status == errorFileNotFound) return null;
+          if (status == errorMoreData && attempt < 2 && byteCount.value > 0) {
+            size = byteCount.value;
+            continue;
+          }
+          if (status != errorSuccess) {
+            throw SystemProxyFailure(
+              'RegQueryValueExW $name failed with status $status',
+            );
+          }
+          final bytes = buffer.asTypedList(byteCount.value);
+          if (type.value == regDword) {
+            return (text: null, number: decodeRegistryDword(bytes));
+          }
+          if (type.value == regSz) {
+            return (text: decodeRegistryText(bytes), number: null);
+          }
+          throw SystemProxyFailure(
+            'Unexpected registry type ${type.value} for $name',
+          );
+        } finally {
+          calloc.free(buffer);
         }
-        final bytes = buffer.asTypedList(byteCount.value);
-        if (type.value == regDword) {
-          return (text: null, number: decodeRegistryDword(bytes));
-        }
-        if (type.value == regSz) {
-          return (text: decodeRegistryText(bytes), number: null);
-        }
-        throw SystemProxyFailure(
-          'Unexpected registry type ${type.value} for $name',
-        );
-      } finally {
-        calloc.free(buffer);
       }
     } finally {
       calloc.free(byteCount);

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:onexray/core/system_proxy/command_runner.dart';
 import 'package:onexray/core/system_proxy/system_proxy_backend.dart';
 import 'package:onexray/core/system_proxy/system_proxy_models.dart';
+import 'package:onexray/core/tools/logger.dart';
 
 /// macOS system proxy backend based on `/usr/sbin/networksetup`.
 ///
@@ -101,36 +102,48 @@ final class MacSystemProxyBackend implements SystemProxyBackend {
 
   @override
   Future<void> restore(SystemProxyRead snapshot) async {
-    final commands = <SystemProxyCommand>[];
     for (final service in _servicesOf(snapshot)) {
       for (final entry in _kinds.entries) {
         final enabled = snapshot.values['$service|${entry.key}|enabled'];
         final server = snapshot.values['$service|${entry.key}|server'] ?? '';
         final port = snapshot.values['$service|${entry.key}|port'] ?? '';
+        if (server.isEmpty || port.isEmpty) {
+          // The user had no server here. Still write the captured values
+          // back so our endpoint disappears; networksetup may reject an
+          // empty server, which is tolerated, never fatal.
+          final reset = await _run(
+            tool,
+            [entry.value.$1, service, server, port.isEmpty ? '0' : port],
+          );
+          if (!reset.success) {
+            ygLogger(
+              'Could not reset ${entry.value.$1} $service to the captured '
+              'empty values: ${reset.errorText}',
+            );
+          }
+          // An empty capture never goes back to on: with no server to point
+          // at, off guarantees a leftover endpoint stays unused.
+          await runSystemProxyCommands(_run, [
+            SystemProxyCommand(tool, [entry.value.$2, service, 'off']),
+          ]);
+          continue;
+        }
         // A configured but switched-off proxy must survive: the server and
         // port are restored whenever they existed, not only when enabled.
-        if (server.isNotEmpty && port.isNotEmpty) {
-          commands.add(SystemProxyCommand(tool, [
-            entry.value.$1,
-            service,
-            server,
-            port,
-          ]));
-        }
-        // A kind whose capture failed gets an explicit off, so it can never
-        // stay enabled on our dead local port.
-        commands.add(
+        // A kind whose capture failed gets an explicit off through the
+        // branch above, so it can never stay enabled on our dead port.
+        await runSystemProxyCommands(_run, [
+          SystemProxyCommand(tool, [entry.value.$1, service, server, port]),
           SystemProxyCommand(
             tool,
             [entry.value.$2, service, enabled == 'Yes' ? 'on' : 'off'],
           ),
-        );
+        ]);
       }
-      commands.add(
+      await runSystemProxyCommands(_run, [
         _setBypassCommand(service, _bypassOf(snapshot, service)),
-      );
+      ]);
     }
-    await runSystemProxyCommands(_run, commands);
   }
 
   @override

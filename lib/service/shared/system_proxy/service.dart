@@ -80,8 +80,11 @@ final class SystemProxyService {
         );
         await _store.write(snapshot);
       }
-      await backend.apply(port: port, before: snapshot.read);
+      // Remember the port before touching the OS: if apply writes part of
+      // its plan and then fails, and the snapshot later becomes unreadable,
+      // the remove() fallback still knows which port to switch off.
       _pendingPort = port;
+      await backend.apply(port: port, before: snapshot.read);
       return null;
     } on SystemProxyFailure catch (error) {
       ygLogger('Apply system proxy failed: $error');

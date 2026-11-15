@@ -993,6 +993,10 @@ class ConnectionCoordinator with WidgetsBindingObserver {
     _syncTrafficSampling();
   }
 
+  /// Releases listeners; used by tests through addTearDown. This is not the
+  /// app exit path — the singleton lives for the whole process — and it
+  /// deliberately does not touch the system proxy: quitting takes the proxy
+  /// back through the tray Quit handler and ServiceManager.serviceDispose().
   void dispose() {
     _closed = true;
     _visibleTrafficPages.clear();

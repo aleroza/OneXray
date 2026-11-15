@@ -140,8 +140,10 @@ void main() {
     expect(os.commands, [
       'kwriteconfig5 --file $file --group Proxy Settings --key httpProxy '
           'http://proxy.internal:3128',
-      'kwriteconfig5 --file $file --group Proxy Settings --key httpsProxy ',
-      'kwriteconfig5 --file $file --group Proxy Settings --key socksProxy ',
+      'kwriteconfig5 --file $file --group Proxy Settings --key httpsProxy '
+          '--delete',
+      'kwriteconfig5 --file $file --group Proxy Settings --key socksProxy '
+          '--delete',
       'kwriteconfig5 --file $file --group Proxy Settings --key NoProxyFor '
           'localhost, .corp',
       'kwriteconfig5 --file $file --group Proxy Settings --key ProxyType 0',
@@ -150,7 +152,7 @@ void main() {
     ]);
   });
 
-  test('a previously absent ProxyType is restored as off', () async {
+  test('keys the user never had are deleted again, ProxyType last', () async {
     final os = _FakeOs();
     final proxy = backend(os);
     final snapshot = await proxy.read();
@@ -160,11 +162,21 @@ void main() {
 
     await proxy.restore(snapshot);
 
-    expect(
-      os.commands.where((line) => line.contains('--key ProxyType')),
-      ['kwriteconfig5 --file ${kioFile.path} --group Proxy Settings '
-          '--key ProxyType 0'],
-    );
+    final file = kioFile.path;
+    expect(os.commands, [
+      'kwriteconfig5 --file $file --group Proxy Settings --key httpProxy '
+          '--delete',
+      'kwriteconfig5 --file $file --group Proxy Settings --key httpsProxy '
+          '--delete',
+      'kwriteconfig5 --file $file --group Proxy Settings --key socksProxy '
+          '--delete',
+      'kwriteconfig5 --file $file --group Proxy Settings --key NoProxyFor '
+          '--delete',
+      'kwriteconfig5 --file $file --group Proxy Settings --key ProxyType '
+          '--delete',
+      'dbus-send --session --type=signal /KIO/Scheduler '
+          'org.kde.KIO.Scheduler.reparseSlaveConfiguration string:',
+    ]);
   });
 
   test('kwriteconfig6 wins when it exists', () async {
