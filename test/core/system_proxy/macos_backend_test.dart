@@ -50,6 +50,7 @@ String _bypassOutput(String service, List<String> domains) => domains.isEmpty
 
 Map<String, String> _network({
   List<String> domains = const [],
+  Map<String, List<String>> domainsByService = const {},
   bool webEnabled = false,
   String webServer = '',
   String webPort = '0',
@@ -70,10 +71,13 @@ Map<String, String> _network({
   for (final service in ['Wi-Fi', 'USB 10/100 LAN'])
     '-getsocksfirewallproxy $service': _serviceState(),
   for (final service in ['Wi-Fi', 'USB 10/100 LAN'])
-    '-getproxybypassdomains $service': _bypassOutput(service, domains),
+    '-getproxybypassdomains $service': _bypassOutput(
+      service,
+      domainsByService[service] ?? domains,
+    ),
 };
 
-MacSystemProxyBackend backend(_FakeOs os) =>
+MacSystemProxyBackend _backend(_FakeOs os) =>
     MacSystemProxyBackend(run: os.call, tool: _tool);
 
 void main() {
@@ -87,7 +91,7 @@ void main() {
       ),
     );
 
-    final state = await backend(os).read();
+    final state = await _backend(os).read();
 
     expect(state.values['services'], 'Wi-Fi\nUSB 10/100 LAN');
     expect(state.enabled, isTrue);
@@ -97,8 +101,14 @@ void main() {
   });
 
   test('apply sets every kind, then bypass, then turns states on', () async {
-    final os = _FakeOs(_network(domains: ['.corp']));
-    final proxy = backend(os);
+    // Only the first service carries user entries; every service keeps its own
+    // list and gains the local bypass tokens.
+    final os = _FakeOs(
+      _network(domainsByService: {
+        'Wi-Fi': ['.corp'],
+      }),
+    );
+    final proxy = _backend(os);
     final before = await proxy.read();
     os.commands.clear();
 
@@ -132,7 +142,7 @@ void main() {
         webPort: '3128',
       ),
     );
-    final proxy = backend(os);
+    final proxy = _backend(os);
     final snapshot = await proxy.read();
     await proxy.apply(port: 10808, before: snapshot);
     os.commands.clear();
@@ -159,7 +169,7 @@ void main() {
       '-getwebproxy Wi-Fi':
           _serviceState(enabled: false, server: '10.0.0.5', port: '8080'),
     });
-    final proxy = backend(os);
+    final proxy = _backend(os);
     final snapshot = await proxy.read();
     await proxy.apply(port: 10808, before: snapshot);
     os.commands.clear();
@@ -184,7 +194,7 @@ void main() {
 
   test('an empty restored bypass list uses the single Empty argument', () async {
     final os = _FakeOs(_network());
-    final proxy = backend(os);
+    final proxy = _backend(os);
     final snapshot = await proxy.read();
     await proxy.apply(port: 10808, before: snapshot);
     os.commands.clear();
@@ -202,7 +212,7 @@ void main() {
 
   test('apply and restore never touch the automatic proxy (PAC)', () async {
     final os = _FakeOs(_network(domains: ['.corp']));
-    final proxy = backend(os);
+    final proxy = _backend(os);
     final snapshot = await proxy.read();
     await proxy.apply(port: 10808, before: snapshot);
     await proxy.restore(snapshot);
@@ -223,7 +233,7 @@ void main() {
     );
     os.commands.clear();
 
-    await backend(os).disable(port: 10808);
+    await _backend(os).disable(port: 10808);
 
     expect(
       os.commands.where((line) => line.contains('state')),
@@ -236,7 +246,7 @@ void main() {
 
   test('a failing read aborts with a concrete reason', () async {
     await expectLater(
-      backend(_FakeOs({})).read(),
+      _backend(_FakeOs({})).read(),
       throwsA(
         isA<SystemProxyFailure>().having(
           (error) => error.message,

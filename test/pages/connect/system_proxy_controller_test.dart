@@ -209,8 +209,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('toggle'));
     await tester.pumpAndSettle();
-    expect(find.text('Save and reconnect'), findsOneWidget);
-    await tester.tap(find.text('Save and reconnect'));
+    expect(find.text('Apply and reconnect'), findsOneWidget);
+    await tester.tap(find.text('Apply and reconnect'));
     await tester.pumpAndSettle();
 
     expect(result, isTrue);
@@ -345,8 +345,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('close-port'));
     await tester.pumpAndSettle();
-    expect(find.text('Save and reconnect'), findsOneWidget);
-    await tester.tap(find.text('Save and reconnect'));
+    expect(find.text('Apply and reconnect'), findsOneWidget);
+    await tester.tap(find.text('Apply and reconnect'));
     await tester.pumpAndSettle();
 
     expect(result, isTrue);

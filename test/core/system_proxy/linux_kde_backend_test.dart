@@ -173,7 +173,11 @@ void main() {
 
     await proxy.apply(port: 10808, before: await proxy.read());
 
-    expect(os.commands.first, startsWith('kwriteconfig6 --file'));
+    // The tool probe runs first; the first write must use kwriteconfig6.
+    expect(
+      os.commands.firstWhere((line) => line.contains('--file')),
+      startsWith('kwriteconfig6 --file'),
+    );
   });
 
   test('an enabled manual plan on our port is detected as ours', () async {
