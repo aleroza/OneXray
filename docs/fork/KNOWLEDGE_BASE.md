@@ -498,9 +498,42 @@ flutter test test/service/connect/compiler_test.dart
 ### F-002. Локальная сборка и проверки
 
 - Flutter 3.50.0 в `~/opt/flutter` (nixpkgs даёт только 3.41.9 — проекту нужен ≥ 3.50).
-- Нативные assets (`cnativeapi`) требуют GTK3/X11/Xi dev-headers и C++ stdlib:
-  build hook чистит `PKG_CONFIG_PATH`, поэтому нужен wrapper `pkg-config` в `PATH`,
-  а также `clang` с `-isystem` путями gcc/wayland/xorgproto.
-  Рабочий `PATH` и обёртки: `/tmp/opencode/devshell.sh`, `/tmp/opencode/bin/`.
+- **Native assets (`cnativeapi`) требуют GTK3/X11/Xi dev-заголовков и C++ stdlib.**
+  Dart build hook чистит `PKG_CONFIG_PATH` (PATH наследует, а переменные — нет), поэтому:
+  - `/tmp/opencode/bin/pkg-config` — обёртка, подставляющая `PKG_CONFIG_PATH` из `/tmp/opencode/pkgconfig.path`;
+  - `/tmp/opencode/bin/clang` — обёртка над nix clang-wrapper + `-isystem` к gcc/wayland/xorgproto/libxext;
+  - `/tmp/opencode/devshell.sh` — PATH + PKG_CONFIG_PATH (source перед flutter-командами).
+  Сборка `pkgconfig.path` = `ls -d /nix/store/*/lib/pkgconfig /nix/store/*/share/pkgconfig`.
 - `lib/core/ffi/generated_bindings.dart` — сгенерированный, в gitignore; без
   `dart run tool/ffigen.dart` анализ не проходит. Заглушку можно написать руками.
+
+### F-003. Рецепт локальной сборки Linux и Android (проверено)
+
+Рабочие пути: Flutter `~/opt/flutter`, Go 1.27.3 `~/opt/go` (libXray требует go ≥ 1.27.3;
+nixpkgs даёт 1.26.8), Android SDK `~/opt/android-sdk`, gomobile `~/opt/gopath/bin`,
+JDK 21 `~/nix/store/7q4av7wzjw098rcc83v1bb1blss1wccx-openjdk-21.0.12+2`.
+
+1. **Ядро libXray** (клон `XTLS/libXray` рядом с OneXray):
+   - Linux: `python3 ../libXray/build/main.py linux` → `linux_so/libXray.so`, `bin/xray`, `dat/*`.
+   - Android: `gomobile init`, затем `python3 ../libXray/build/main.py android`
+     (нужны `ANDROID_HOME`, `ANDROID_NDK_HOME`, JDK в PATH) → `libXray.aar`, `libXray-sources.jar`.
+2. **Копирование** (см. `readme/FIRST_RUN.md`):
+   `linux_so/libXray.so → linux/app/`, `bin/xray → linux/app/OneXrayCore` (+x),
+   `dat/* → assets/dat/`, `libXray.aar` + `libXray-sources.jar → android/app/libs/`.
+3. **Сборка**: `flutter build linux --release`, `flutter build apk --release`.
+4. **Окружение nix** (`/tmp/opencode/build-env.nix`): gcc, python3, clang, cmake, ninja,
+   pkg-config, gtk3/glib/pango/cairo/atk/gdk-pixbuf/harfbuzz/libepoxy/fontconfig/wayland/
+   libX11/libXi/libxkbcommon/xz/libsecret/libayatana-appindicator.
+   Обязательно: `PKG_CONFIG_PATH` = **все** `/nix/store/*/lib/pkgconfig` (иначе теряются
+   pcre2/wayland), `NIX_LDFLAGS` и `LD_LIBRARY_PATH` = lib-каталоги пакетов
+   (иначе линкер не находит `libepoxy.so.0`).
+5. **RPATH готового bundle**: `patchelf --set-rpath '$ORIGIN/lib:<nix lib dirs>'` для
+   `OneXray` и всех `bundle/lib/*.so` — иначе `ldd` показывает `libepoxy.so.0 => not found`.
+6. **Android SDK**: cmdline-tools zip → `sdkmanager --install "platform-tools"
+   "platforms;android-37.0" "build-tools;37.0.0" "ndk;30.0.16248370"` (лицензии через `yes |`).
+   В `build.gradle.kts` стоит `compileSdk = 37`, а платформа называется `android-37.0`.
+7. **Результаты**: `build/linux/x64/release/bundle/` (OneXray + OneXrayCore + lib/) и
+   `build/app/outputs/flutter-apk/app-release.apk` (~149 МБ, arm64-v8a + x86_64).
+   Gradle `assembleRelease` — ~22 мин.
+8. **Не проверено локально**: Swift/Apple (нет Swift в nix) и Windows.
+
