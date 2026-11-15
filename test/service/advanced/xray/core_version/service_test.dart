@@ -4,12 +4,15 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onexray/core/constants/preferences.dart';
 import 'package:onexray/core/errors/failure.dart';
 import 'package:onexray/core/model/core_download_capability.dart';
 import 'package:onexray/core/model/core_release.dart';
 import 'package:onexray/core/tools/core_platform.dart';
 import 'package:onexray/service/advanced/xray/core_version/service.dart';
 import 'package:onexray/service/advanced/xray/core_version/storage.dart';
+import 'package:onexray/service/connect/runtime.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 // ignore: depend_on_referenced_packages
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -68,6 +71,8 @@ void main() {
     CoreDownloadCapability? capability,
     List<int>? zip,
     void Function()? onDownload,
+    Future<ConnectionRuntime?> Function()? readCurrentRuntime,
+    Future<void> Function()? disconnect,
   }) => CoreVersionService(
     openStorage: () async => storage,
     capability: () =>
@@ -75,6 +80,8 @@ void main() {
         const CoreDownloadCapability.disabled(
           CoreDownloadUnavailableReason.buildDisabled,
         ),
+    readCurrentRuntime: readCurrentRuntime ?? (() async => null),
+    disconnect: disconnect ?? (() async {}),
     catalogAssetName: () => _linuxAsset,
     catalogRequest: (uri, headers) async => (
       statusCode: 200,
@@ -191,4 +198,132 @@ void main() {
     await service.remove('v26.11.9-42');
     expect(await directory.exists(), isFalse);
   });
+
+  test(
+    'activating stops a live connection before saving the selection',
+    () async {
+      String? savedDuringDisconnect;
+      var observed = false;
+      final service = serviceFor(
+        readCurrentRuntime: () async => _ActiveRuntime(),
+        disconnect: () async {
+          savedDuringDisconnect = await PreferencesKey()
+              .readActiveCoreVersion();
+          observed = true;
+        },
+      );
+
+      await service.activate('v26.11.9-42');
+
+      expect(observed, isTrue);
+      expect(savedDuringDisconnect, isNull);
+      expect(await service.activeInstallationId(), 'v26.11.9-42');
+    },
+  );
+
+  test('an idle connection needs no disconnect to switch', () async {
+    var disconnects = 0;
+    final service = serviceFor(disconnect: () async => disconnects++);
+
+    await service.activate('v26.11.9-42');
+
+    expect(disconnects, 0);
+    expect(await service.activeInstallationId(), 'v26.11.9-42');
+  });
+
+  test(
+    'a failed disconnect still saves the selection and is reported',
+    () async {
+      final service = serviceFor(
+        readCurrentRuntime: () async => _ActiveRuntime(),
+        disconnect: () async => throw StateError('coordinator unavailable'),
+      );
+
+      await expectLater(
+        service.activate('v26.11.9-42'),
+        throwsA(failureOf('coreVersionsDisconnectFailed')),
+      );
+      expect(await service.activeInstallationId(), 'v26.11.9-42');
+    },
+  );
+
+  test('returning to bundled never touches the connection', () async {
+    var disconnects = 0;
+    await serviceFor().select('v26.11.9-42');
+
+    await serviceFor(
+      readCurrentRuntime: () async => _ActiveRuntime(),
+      disconnect: () async => disconnects++,
+    ).activate(null);
+
+    expect(disconnects, 0);
+    expect(await serviceFor().activeInstallationId(), isNull);
+  });
+
+  test('isConnectionActive reports the coordinator runtime', () async {
+    expect(await serviceFor().isConnectionActive(), isFalse);
+    expect(
+      await serviceFor(readCurrentRuntime: () async => _ActiveRuntime())
+          .isConnectionActive(),
+      isTrue,
+    );
+    expect(
+      await serviceFor(
+        readCurrentRuntime: () async => throw StateError('not ready'),
+      ).isConnectionActive(),
+      isFalse,
+    );
+  });
+
+  test(
+    'activeExecutablePath prepares the selection and tolerates breakage',
+    () async {
+      final directory = storage.versionDirectory('v26.11.9-42');
+      final binary = File(
+        p.join(
+          directory.path,
+          'libxray-linux-x64',
+          Platform.isWindows ? 'xray.exe' : 'xray',
+        ),
+      );
+      await binary.parent.create(recursive: true);
+      await binary.writeAsString('core-binary');
+      await storage.writeManifest(
+        directory,
+        CoreVersionManifest(
+          releaseTag: 'v26.11.9',
+          assetId: 42,
+          assetName: 'libxray-linux-x64.zip',
+          assetSize: 1234,
+          expectedSha256: 'a' * 64,
+          installedSha256: 'b' * 64,
+          platform: 'linux',
+          abi: 'x64',
+          installedAt: DateTime.utc(2026, 11, 10),
+          installDir: directory.path,
+        ),
+      );
+      final service = serviceFor();
+      expect(await service.activeExecutablePath(), isNull);
+
+      await service.select('v26.11.9-42');
+      final path = await service.activeExecutablePath();
+      expect(
+        path,
+        p.join(
+          directory.path,
+          Platform.isWindows ? 'OneXrayCore.exe' : 'OneXrayCore',
+        ),
+      );
+      expect(await File(path!).exists(), isTrue);
+
+      // Losing the installed files keeps the selection but reports no path,
+      // so the launch paths use the bundled core.
+      await directory.delete(recursive: true);
+      expect(await service.activeExecutablePath(), isNull);
+      expect(await service.activeInstallationId(), 'v26.11.9-42');
+    },
+  );
 }
+
+class _ActiveRuntime extends Fake implements ConnectionRuntime {}
