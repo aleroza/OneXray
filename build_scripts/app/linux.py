@@ -7,7 +7,13 @@ from app.builder import Builder
 
 class LinuxBuilder(Builder):
     def build_app(self):
-        arguments = ("--artifact-name", f"{self.project}-{self.package_suffix}." + "{{ext}}")
+        # The Linux desktop ships downloadable cores unconditionally.
+        arguments = (
+            "--build-dart-define",
+            "ONEXRAY_CORE_DOWNLOADS=true",
+            "--artifact-name",
+            f"{self.project}-{self.package_suffix}." + "{{ext}}",
+        )
         self.fastforge_build("zip", arguments=arguments)
         self._build_deb(arguments)
         packages = [

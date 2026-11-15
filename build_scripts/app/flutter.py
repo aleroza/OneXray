@@ -19,9 +19,21 @@ BUILDERS = {
 }
 
 
-def build(project: str, target: str, build_scripts_dir: str, *, windows_mode: str = "exe"):
+def build(
+    project: str,
+    target: str,
+    build_scripts_dir: str,
+    *,
+    windows_mode: str = "exe",
+    android_distribution: str = "play",
+):
     system = "macos" if target == "macos_se" else target
-    options = {"mode": windows_mode} if system == "windows" else {}
+    if system == "windows":
+        options = {"mode": windows_mode}
+    elif system == "android":
+        options = {"distribution": android_distribution}
+    else:
+        options = {}
     builder = BUILDERS[target](project, system, build_scripts_dir, **options)
     root = Path(builder.root_dir)
     pubspec = root / "pubspec.yaml"

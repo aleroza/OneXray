@@ -121,6 +121,8 @@ class WindowsBuilder(Builder):
                 "build",
                 "windows",
                 "--dart-define=ONEXRAY_WINDOWS_MODE=msix",
+                # Sandboxed packages keep the bundled core.
+                "--dart-define=ONEXRAY_CORE_DOWNLOADS=false",
             ]
             if self.local_development:
                 command.append("--dart-define=ONEXRAY_WINDOWS_DEVELOPMENT=true")
@@ -155,6 +157,8 @@ class WindowsBuilder(Builder):
             self.fastforge_build(
                 "exe,zip",
                 arguments=(
+                    "--build-dart-define",
+                    "ONEXRAY_CORE_DOWNLOADS=true",
                     "--build-dart-define",
                     "ONEXRAY_WINDOWS_MODE=exe",
                     "--flutter-build-args",
