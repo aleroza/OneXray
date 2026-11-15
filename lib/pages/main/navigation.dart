@@ -45,6 +45,7 @@ enum AppPageDestination {
   sourceDetails("source-details"),
   serverManualGroups("server-manual-groups"),
   xrayDiagnostics("xray-diagnostics"),
+  xrayCoreVersions("xray-core-versions"),
   xrayLogs("xray-logs"),
   manualServerOrder("manual-server-order"),
   serverEditor("server-editor"),

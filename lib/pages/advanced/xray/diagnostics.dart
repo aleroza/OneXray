@@ -19,12 +19,14 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 class XrayDiagnosticsPage extends StatelessWidget {
   final void Function(BuildContext, LogFileViewerParams) onLog;
   final void Function(BuildContext, ConfigFileViewerParams) onConfig;
+  final void Function(BuildContext) onCoreVersions;
   final XrayRuntimeController Function()? createController;
 
   const XrayDiagnosticsPage({
     super.key,
     required this.onLog,
     required this.onConfig,
+    required this.onCoreVersions,
     this.createController,
   });
 
@@ -74,6 +76,8 @@ class XrayDiagnosticsPage extends StatelessWidget {
                                     ? palette.destructive
                                     : palette.foreground,
                               ),
+                          showChevron: true,
+                          onTap: () => onCoreVersions(context),
                         ),
                         SettingRow(
                           title: l.prototypeVersion,

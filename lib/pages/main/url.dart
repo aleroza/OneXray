@@ -24,6 +24,7 @@ import 'package:onexray/pages/advanced/tunnel/android/apps.dart';
 import 'package:onexray/pages/advanced/tunnel/windows/page.dart';
 import 'package:onexray/pages/advanced/tunnel/interface/page.dart';
 import 'package:onexray/pages/advanced/xray/geodata/page.dart';
+import 'package:onexray/pages/advanced/xray/core_versions/page.dart';
 import 'package:onexray/pages/advanced/xray/geodata/add.dart';
 import 'package:onexray/pages/advanced/xray/geodata/detail.dart';
 import 'package:onexray/service/advanced/policy_editor.dart';
@@ -264,7 +265,13 @@ final _pageRoutes = <_PageRoute>[
         AppPageDestination.configFileViewer,
         extra: params,
       ),
+      onCoreVersions: (context) =>
+          context.pushScoped(AppPageDestination.xrayCoreVersions),
     ),
+  ),
+  _route(
+    AppPageDestination.xrayCoreVersions,
+    (_, _) => const CoreVersionsPage(),
   ),
   _route(AppPageDestination.localApi, (_, _) => const LocalApiPage()),
   _route(
