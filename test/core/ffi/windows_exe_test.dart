@@ -21,30 +21,33 @@ void main() {
   late List<VpnStatus> events;
   late List<Object> errors;
 
-  WindowsExeFfiApi create({Future<StartVpnRequest> Function()? readRequest}) =>
-      WindowsExeFfiApi(
-        filesDirectory: directory.path,
-        executable: p.join(directory.path, 'OneXrayCore.exe'),
-        process: process,
-        readRequest:
-            readRequest ??
-            () async => StartVpnRequest(
-              TunJson.fromJson({
-                'tunDnsIPv4': '8.8.8.8',
-                'autoOutboundsInterface': 'Ethernet 2',
-              }),
-              '18187',
-              '18186',
-              jsonEncode(
-                LibXrayInvokeRequest(
-                  method: LibXrayMethod.runXray,
-                  payload: RunXrayRequest('{"inbounds":[]}').toJson(),
-                ).toJson(),
-              ),
-            ),
-        notify: (status) async => events.add(status),
-        notifyError: (error) => errors.add(error),
-      );
+  WindowsExeFfiApi create({
+    Future<StartVpnRequest> Function()? readRequest,
+    Future<String?> Function()? coreExecutablePath,
+  }) => WindowsExeFfiApi(
+    filesDirectory: directory.path,
+    executable: p.join(directory.path, 'OneXrayCore.exe'),
+    process: process,
+    coreExecutablePath: coreExecutablePath,
+    readRequest:
+        readRequest ??
+        () async => StartVpnRequest(
+          TunJson.fromJson({
+            'tunDnsIPv4': '8.8.8.8',
+            'autoOutboundsInterface': 'Ethernet 2',
+          }),
+          '18187',
+          '18186',
+          jsonEncode(
+            LibXrayInvokeRequest(
+              method: LibXrayMethod.runXray,
+              payload: RunXrayRequest('{"inbounds":[]}').toJson(),
+            ).toJson(),
+          ),
+        ),
+    notify: (status) async => events.add(status),
+    notifyError: (error) => errors.add(error),
+  );
 
   setUp(() async {
     final root = Directory('../references/windows-exe-tests').absolute;
@@ -488,6 +491,34 @@ void main() {
     expect(events, isEmpty);
   });
 
+  test(
+    'EXE launches a selected downloaded Core from its prepared path',
+    () async {
+      final downloaded = File(
+        p.join(directory.path, 'versions', 'v26.11.9-42', 'OneXrayCore.exe'),
+      );
+      await downloaded.parent.create(recursive: true);
+      await downloaded.writeAsString('downloaded core');
+      final api = create(coreExecutablePath: () async => downloaded.path);
+
+      expect((await api.startVpn()).status, VpnStatus.connected);
+      expect(process.executable, downloaded.path);
+    },
+  );
+
+  for (final (label, provider) in [
+    ('none', () async => null),
+    ('missing', () async => 'missing/OneXrayCore.exe'),
+    ('failing', () async => throw StateError('core storage unreadable')),
+  ]) {
+    test('EXE keeps the bundled Core for a $label core selection', () async {
+      final api = create(coreExecutablePath: provider);
+
+      expect((await api.startVpn()).status, VpnStatus.connected);
+      expect(process.executable, p.join(directory.path, 'OneXrayCore.exe'));
+    });
+  }
+
   test('Windows arguments preserve spaces, quotes and trailing slashes', () {
     expect(quoteWindowsArgument('Ethernet 2'), '"Ethernet 2"');
     expect(quoteWindowsArgument(''), '""');
@@ -508,6 +539,7 @@ class _Process extends WindowsCoreProcess {
   Future<void> Function()? onStart;
   int? stopBeforeFailure;
   int stops = 0;
+  String? executable;
   List<String>? arguments;
   final launched = Completer<void>();
   final exits = <int, Completer<bool>>{};
@@ -555,6 +587,7 @@ class _Process extends WindowsCoreProcess {
   Future<int> start(String executable, List<String> arguments) async {
     await onStart?.call();
     if (failStart) throw StateError('UAC cancelled');
+    this.executable = executable;
     this.arguments = arguments;
     running = true;
     launched.complete();

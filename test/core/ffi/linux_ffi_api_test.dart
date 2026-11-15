@@ -545,6 +545,55 @@ void main() {
       },
     );
   }
+  test('a selected downloaded core starts from its prepared path', () async {
+    final fixture = await _Fixture.create();
+    final downloaded = File(
+      p.join(fixture.directory.path, 'versions', 'v26.11.9-42', 'OneXrayCore'),
+    );
+    await downloaded.parent.create(recursive: true);
+    await downloaded.writeAsString('downloaded core');
+    String? startedPath;
+    final process = _OwnedProcess(42);
+    addTearDown(process.finish);
+    final api = fixture.api(
+      coreExecutablePath: () async => downloaded.path,
+      startProcess: (executable, _) async {
+        startedPath = executable;
+        fixture.pids.add(process.pid);
+        return process;
+      },
+    );
+
+    expect(await api.startCore(_runConfig(), _tunConfig()), isTrue);
+    expect(startedPath, downloaded.path);
+  });
+
+  test(
+    'a broken core selection launches the bundled Core without failing',
+    () async {
+      for (final provider in [
+        () async => null,
+        () async => 'missing/OneXrayCore',
+        () async => throw StateError('storage unreadable'),
+      ]) {
+        final fixture = await _Fixture.create();
+        String? startedPath;
+        final process = _OwnedProcess(42);
+        addTearDown(process.finish);
+        final api = fixture.api(
+          coreExecutablePath: provider,
+          startProcess: (executable, _) async {
+            startedPath = executable;
+            fixture.pids.add(process.pid);
+            return process;
+          },
+        );
+
+        expect(await api.startCore(_runConfig(), _tunConfig()), isTrue);
+        expect(startedPath, p.join(fixture.directory.path, 'OneXrayCore'));
+      }
+    },
+  );
 }
 
 LibXrayRunConfig _runConfig() => LibXrayRunConfig(
@@ -588,12 +637,14 @@ class _Fixture {
     Future<ProcessResult> Function(String, List<String>)? runCommand,
     Future<Process> Function(String, List<String>)? startProcess,
     Future<StartVpnRequest> Function()? readRequest,
+    Future<String?> Function()? coreExecutablePath,
   }) {
     final api = LinuxFfiApi.forTesting(
       filesDirectory: directory.path,
       executablePath: p.join(directory.path, 'OneXrayCore'),
       startProcess: startProcess,
       readRequest: readRequest,
+      coreExecutablePath: coreExecutablePath,
       runCommand: (executable, arguments) async {
         commands.add([executable, ...arguments]);
         if (executable == 'pgrep') {

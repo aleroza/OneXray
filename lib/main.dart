@@ -1,9 +1,13 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:onexray/core/ffi/linux_ffi_api.dart';
+import 'package:onexray/core/ffi/windows/exe_ffi_api.dart';
 import 'package:onexray/core/pigeon/flutter_api.dart';
 import 'package:onexray/core/pigeon/host_api.dart';
 import 'package:onexray/core/pigeon/messages.g.dart';
 import 'package:onexray/core/tools/platform.dart';
 import 'package:onexray/pages/main/router.dart';
+import 'package:onexray/service/advanced/xray/core_version/capability.dart';
+import 'package:onexray/service/advanced/xray/core_version/service.dart';
 import 'package:onexray/service/launch/app_startup.dart';
 import 'package:onexray/service/shared/menu/short_cut/service.dart';
 import 'package:onexray/service/shared/menu/settings/service.dart';
@@ -25,6 +29,13 @@ Future<void> main(List<String> _) async {
   await appStartup.prepare();
 
   if (AppPlatform.isDesktop) {
+    // The desktop core launch paths ask this provider for the selected
+    // downloaded core; a disabled capability keeps the bundled core.
+    if (CoreDownloadCapabilityService.evaluate().enabled) {
+      final versions = CoreVersionService();
+      LinuxFfiApi.coreExecutableProvider = versions.activeExecutablePath;
+      WindowsExeFfiApi.coreExecutableProvider = versions.activeExecutablePath;
+    }
     await WindowService().prepare(
       size: _desktopWindowSize,
       minimumSize: _minimumDesktopWindowSize,

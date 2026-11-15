@@ -16,6 +16,11 @@ class WindowsExeFfiApi extends WindowsFfiApi {
   final WindowsCoreProcess _process;
   final String? _filesDirectory;
   final String _corePath;
+
+  /// Registered at startup by the service layer; supplies the executable of
+  /// the selected downloaded core version. Null keeps the bundled core.
+  static Future<String?> Function()? coreExecutableProvider;
+  final Future<String?> Function()? _coreExecutablePath;
   final Future<StartVpnRequest> Function() _readRequest;
   final Future<void> Function(VpnStatus) _notify;
   final void Function(Object) _notifyError;
@@ -35,10 +40,12 @@ class WindowsExeFfiApi extends WindowsFfiApi {
     Future<StartVpnRequest> Function()? readRequest,
     Future<void> Function(VpnStatus)? notify,
     void Function(Object)? notifyError,
+    Future<String?> Function()? coreExecutablePath,
   }) : _process = process ?? WindowsCoreProcess(),
        _corePath =
            executable ??
            p.join(p.dirname(Platform.resolvedExecutable), 'OneXrayCore.exe'),
+       _coreExecutablePath = coreExecutablePath ?? coreExecutableProvider,
        _readRequest = readRequest ?? StartVpnRequestReader.readFromStartFile,
        _notify = notify ?? AppFlutterApi().vpnStatusChanged,
        _notifyError =
@@ -116,7 +123,7 @@ class WindowsExeFfiApi extends WindowsFfiApi {
       );
       await clearRuntimeLogs();
       launchAttempted = true;
-      final pid = await _process.start(_corePath, arguments);
+      final pid = await _process.start(await _startupCorePath(), arguments);
       await Future<void>.delayed(const Duration(seconds: 1));
       if (!(await _monitor.readPids()).contains(pid)) {
         throw StateError(
@@ -161,6 +168,25 @@ class WindowsExeFfiApi extends WindowsFfiApi {
     _monitor.invalidateQueries();
     await _process.stopAll();
     _monitor.clearWatches();
+  }
+
+  /// A selected downloaded core starts with the same elevation when its
+  /// prepared executable exists; any missing or unreadable selection keeps
+  /// the bundled core next to the app.
+  Future<String> _startupCorePath() async {
+    final provider = _coreExecutablePath;
+    if (provider == null) {
+      return _corePath;
+    }
+    try {
+      final path = await provider();
+      if (path != null && await File(path).exists()) {
+        return path;
+      }
+    } catch (error) {
+      ygLogger('selected core path unavailable: $error');
+    }
+    return _corePath;
   }
 
   NativeVpnCommandResult _failed(

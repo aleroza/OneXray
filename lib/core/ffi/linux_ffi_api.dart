@@ -21,9 +21,14 @@ class LinuxFfiApi extends BaseFfiApi {
 
   factory LinuxFfiApi() => _singleton;
 
+  /// Registered at startup by the service layer; supplies the executable of
+  /// the selected downloaded core version. Null keeps the bundled core.
+  static Future<String?> Function()? coreExecutableProvider;
+
   LinuxFfiApi._internal()
     : _filesDirectory = null,
       _executablePath = null,
+      _coreExecutablePath = coreExecutableProvider,
       _runCommand = Process.run,
       _startProcess = Process.start,
       _readRequest = StartVpnRequestReader.readFromStartFile,
@@ -41,6 +46,7 @@ class LinuxFfiApi extends BaseFfiApi {
     Future<StartVpnRequest> Function()? readRequest,
     Future<void> Function(VpnStatus)? notify,
     void Function(Object)? notifyError,
+    this._coreExecutablePath,
   }) : _startProcess = startProcess ?? Process.start,
        _readRequest = readRequest ?? StartVpnRequestReader.readFromStartFile,
        _notify = notify ?? AppFlutterApi().vpnStatusChanged,
@@ -50,6 +56,7 @@ class LinuxFfiApi extends BaseFfiApi {
   static const _coreBin = 'OneXrayCore';
   final String? _filesDirectory;
   final String? _executablePath;
+  final Future<String?> Function()? _coreExecutablePath;
   final Future<ProcessResult> Function(String, List<String>) _runCommand;
   final Future<Process> Function(String, List<String>) _startProcess;
   final Future<StartVpnRequest> Function() _readRequest;
@@ -161,7 +168,7 @@ class LinuxFfiApi extends BaseFfiApi {
         errorFile: errorFile.path,
       );
       await clearRuntimeLogs();
-      final process = await _startProcess(corePath, arguments);
+      final process = await _startProcess(await _startupCorePath(), arguments);
       _coreProcess = process;
       _bindProcess(process);
       unawaited(_monitor.waitForExit(process.pid));
@@ -262,6 +269,24 @@ class LinuxFfiApi extends BaseFfiApi {
       throw const FormatException('Invalid Core PID returned by pgrep');
     }
     return pids;
+  }
+
+  /// A selected downloaded core starts when its prepared executable exists;
+  /// any missing or unreadable selection silently keeps the bundled core.
+  Future<String> _startupCorePath() async {
+    final provider = _coreExecutablePath;
+    if (provider == null) {
+      return corePath;
+    }
+    try {
+      final path = await provider();
+      if (path != null && await File(path).exists()) {
+        return path;
+      }
+    } catch (error) {
+      ygLogger('selected core path unavailable: $error');
+    }
+    return corePath;
   }
 
   String get corePath {
