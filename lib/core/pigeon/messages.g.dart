@@ -720,6 +720,51 @@ class BridgeHostApi {
     return pigeonVar_replyValue! as PlatformPermissionResult;
   }
 
+  /// Publishes the native library of an installed core release and returns
+  /// its path relative to the app files directory.
+  Future<String?> publishCoreLibrary(
+    String archivePath,
+    String abi,
+    String installationId,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.onexray.BridgeHostApi.publishCoreLibrary$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[archivePath, abi, installationId],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+    return pigeonVar_replyValue as String?;
+  }
+
+  /// Describes the core runtime this process loaded.
+  Future<String> coreRuntimeInfo() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.onexray.BridgeHostApi.coreRuntimeInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as String;
+  }
+
   Future<List<AndroidAppInfo>> getInstalledApps() async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.onexray.BridgeHostApi.getInstalledApps$pigeonVar_messageChannelSuffix';

@@ -18,7 +18,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import libXray.LibXray
+import net.yuandev.onexray.core.AndroidCoreBridgeProvider
+import net.yuandev.onexray.core.AndroidCoreInstaller
 import net.yuandev.onexray.vpn.VpnController
 import net.yuandev.onexray.vpn.VpnStatusConnection
 import java.io.ByteArrayOutputStream
@@ -137,8 +138,44 @@ class AppHostApi(
         scope.launch {
             // Temporary cores share process-global Xray state. The VPN runs in :native.
             invokeMutex.withLock {
-                callback(runCatching { LibXray.invoke(requestJson) })
+                callback(runCatching {
+                    AndroidCoreBridgeProvider.initialize(context).invoke(requestJson)
+                })
             }
+        }
+    }
+
+    override fun publishCoreLibrary(
+        archivePath: String,
+        abi: String,
+        installationId: String,
+        callback: (Result<String?>) -> Unit,
+    ) {
+        scope.launch {
+            callback(
+                Result.success(
+                    runCatching {
+                        AndroidCoreInstaller.publish(
+                            context,
+                            archivePath,
+                            abi,
+                            installationId,
+                        )
+                    }.getOrNull(),
+                ),
+            )
+        }
+    }
+
+    override fun coreRuntimeInfo(callback: (Result<String>) -> Unit) {
+        scope.launch {
+            callback(
+                Result.success(
+                    runCatching {
+                        AndroidCoreBridgeProvider.runtimeInfo(context)
+                    }.getOrDefault("{}"),
+                ),
+            )
         }
     }
 

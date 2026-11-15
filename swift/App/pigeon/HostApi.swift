@@ -89,6 +89,19 @@ final class AppHostApi: @preconcurrency BridgeHostApi {
     }
     
     /// android
+    func publishCoreLibrary(
+        archivePath: String,
+        abi: String,
+        installationId: String,
+        completion: @escaping (Result<String?, any Error>) -> Void
+    ) {
+        completion(.success(nil))
+    }
+
+    func coreRuntimeInfo(completion: @escaping (Result<String, any Error>) -> Void) {
+        completion(.success("{}"))
+    }
+
     func getInstalledApps(completion: @escaping (Result<[AndroidAppInfo], any Error>) -> Void) {
         completion(.success([]))
     }

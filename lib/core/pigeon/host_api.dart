@@ -414,6 +414,41 @@ class AppHostApi {
     }
   }
 
+  /// Publishes the native library of an installed Android core release and
+  /// returns its path relative to the app files directory.
+  Future<String?> publishCoreLibrary(
+    String archivePath,
+    String abi,
+    String installationId,
+  ) async {
+    if (!AppPlatform.isAndroid) {
+      return null;
+    }
+    try {
+      return await _api.publishCoreLibrary(
+        archivePath,
+        abi,
+        installationId,
+      );
+    } catch (error, stackTrace) {
+      _reportUnexpected('publishCoreLibrary', error, stackTrace);
+      rethrow;
+    }
+  }
+
+  /// Describes the core runtime the App process loaded.
+  Future<String> coreRuntimeInfo() async {
+    if (!AppPlatform.isAndroid) {
+      return '{}';
+    }
+    try {
+      return await _api.coreRuntimeInfo();
+    } catch (error, stackTrace) {
+      _reportUnexpected('coreRuntimeInfo', error, stackTrace);
+      return '{}';
+    }
+  }
+
   Future<List<AndroidAppInfo>> getInstalledApps() async {
     if (AppPlatform.isAndroid) {
       try {

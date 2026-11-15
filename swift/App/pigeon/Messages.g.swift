@@ -642,6 +642,11 @@ protocol BridgeHostApi {
   func invoke(requestJson: String, completion: @escaping (Result<String, Error>) -> Void)
   func queryPlatformPermission(completion: @escaping (Result<PlatformPermissionResult, Error>) -> Void)
   func requestPlatformPermission(completion: @escaping (Result<PlatformPermissionResult, Error>) -> Void)
+  /// Publishes the native library of an installed core release and returns
+  /// its path relative to the app files directory.
+  func publishCoreLibrary(archivePath: String, abi: String, installationId: String, completion: @escaping (Result<String?, Error>) -> Void)
+  /// Describes the core runtime this process loaded.
+  func coreRuntimeInfo(completion: @escaping (Result<String, Error>) -> Void)
   func getInstalledApps(completion: @escaping (Result<[AndroidAppInfo], Error>) -> Void)
   func getAppIcon(packageName: String, completion: @escaping (Result<FlutterStandardTypedData?, Error>) -> Void)
   func useSystemExtension(completion: @escaping (Result<Bool, Error>) -> Void)
@@ -765,6 +770,43 @@ class BridgeHostApiSetup {
       }
     } else {
       requestPlatformPermissionChannel.setMessageHandler(nil)
+    }
+    /// Publishes the native library of an installed core release and returns
+    /// its path relative to the app files directory.
+    let publishCoreLibraryChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.onexray.BridgeHostApi.publishCoreLibrary\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      publishCoreLibraryChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let archivePathArg = args[0] as! String
+        let abiArg = args[1] as! String
+        let installationIdArg = args[2] as! String
+        api.publishCoreLibrary(archivePath: archivePathArg, abi: abiArg, installationId: installationIdArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      publishCoreLibraryChannel.setMessageHandler(nil)
+    }
+    /// Describes the core runtime this process loaded.
+    let coreRuntimeInfoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.onexray.BridgeHostApi.coreRuntimeInfo\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      coreRuntimeInfoChannel.setMessageHandler { _, reply in
+        api.coreRuntimeInfo { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      coreRuntimeInfoChannel.setMessageHandler(nil)
     }
     let getInstalledAppsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.onexray.BridgeHostApi.getInstalledApps\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

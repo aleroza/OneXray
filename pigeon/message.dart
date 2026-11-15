@@ -38,6 +38,19 @@ abstract class BridgeHostApi {
 
   //android=======================
 
+  /// Publishes the native library of an installed core release and returns
+  /// its path relative to the app files directory.
+  @asyncCallback
+  String? publishCoreLibrary(
+    String archivePath,
+    String abi,
+    String installationId,
+  );
+
+  /// Describes the core runtime this process loaded.
+  @asyncCallback
+  String coreRuntimeInfo();
+
   @asyncCallback
   List<AndroidAppInfo> getInstalledApps();
 

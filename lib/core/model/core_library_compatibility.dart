@@ -73,6 +73,12 @@ String? coreLibraryEntry(CorePlatform platform, CoreAbi abi) {
   return null;
 }
 
+/// The ABI directory an Android archive uses for the native library.
+String coreLibraryAbiDirectory(CoreAbi abi) => switch (abi) {
+  CoreAbi.arm64 => 'arm64-v8a',
+  CoreAbi.x64 => 'x86_64',
+};
+
 /// The ELF machine the native library must report for this platform.
 int? coreLibraryMachine(CorePlatform platform, CoreAbi abi) {
   if (platform == CorePlatform.android) {

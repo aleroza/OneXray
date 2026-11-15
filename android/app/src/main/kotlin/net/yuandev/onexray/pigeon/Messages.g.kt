@@ -702,6 +702,13 @@ interface BridgeHostApi {
   fun invoke(requestJson: String, callback: (Result<String>) -> Unit)
   fun queryPlatformPermission(callback: (Result<PlatformPermissionResult>) -> Unit)
   fun requestPlatformPermission(callback: (Result<PlatformPermissionResult>) -> Unit)
+  /**
+   * Publishes the native library of an installed core release and returns
+   * its path relative to the app files directory.
+   */
+  fun publishCoreLibrary(archivePath: String, abi: String, installationId: String, callback: (Result<String?>) -> Unit)
+  /** Describes the core runtime this process loaded. */
+  fun coreRuntimeInfo(callback: (Result<String>) -> Unit)
   fun getInstalledApps(callback: (Result<List<AndroidAppInfo>>) -> Unit)
   fun getAppIcon(packageName: String, callback: (Result<ByteArray?>) -> Unit)
   fun useSystemExtension(callback: (Result<Boolean>) -> Unit)
@@ -836,6 +843,46 @@ interface BridgeHostApi {
         if (api != null) {
           channel.setMessageHandler { _, reply ->
             api.requestPlatformPermission{ result: Result<PlatformPermissionResult> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(MessagesPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(MessagesPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.onexray.BridgeHostApi.publishCoreLibrary$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val archivePathArg = args[0] as String
+            val abiArg = args[1] as String
+            val installationIdArg = args[2] as String
+            api.publishCoreLibrary(archivePathArg, abiArg, installationIdArg) { result: Result<String?> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(MessagesPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(MessagesPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.onexray.BridgeHostApi.coreRuntimeInfo$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.coreRuntimeInfo{ result: Result<String> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(MessagesPigeonUtils.wrapError(error))

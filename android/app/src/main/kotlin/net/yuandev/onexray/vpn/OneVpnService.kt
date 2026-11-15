@@ -30,8 +30,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import libXray.DialerController
-import libXray.LibXray
+import net.yuandev.onexray.core.AndroidCoreBridgeProvider
+import net.yuandev.onexray.core.CoreDialerController
 import net.yuandev.onexray.MainActivity
 import net.yuandev.onexray.R
 import net.yuandev.onexray.automation.AutomationStore
@@ -75,10 +75,11 @@ class OneVpnService : VpnService() {
         private val coreLifecycleLock = Any()
 
         @Synchronized
-        private fun initController() {
+        private fun initController(serviceContext: Context) {
             if (controllerInit) return
-            LibXray.registerDialerController(controller)
-            LibXray.registerListenerController(controller)
+            val bridge = AndroidCoreBridgeProvider.initialize(serviceContext)
+            bridge.registerDialerController(controller)
+            bridge.registerListenerController(controller)
             controllerInit = true
         }
     }
@@ -165,7 +166,7 @@ class OneVpnService : VpnService() {
         stopTun()
     }
 
-    private class VPNController : DialerController {
+    private class VPNController : CoreDialerController {
         private val vpn = AtomicReference<OneVpnService?>()
 
         fun attach(service: OneVpnService) {
@@ -184,6 +185,9 @@ class OneVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
+        // The runtime is chosen before any Core call touches the gomobile
+        // classes, so a selected version is loaded instead of the bundled one.
+        AndroidCoreBridgeProvider.initialize(applicationContext)
         initService()
         val filter = IntentFilter(ACTION_STOP_REQUEST)
         ContextCompat.registerReceiver(
@@ -313,7 +317,7 @@ class OneVpnService : VpnService() {
             XLog.d(e)
         }
         try {
-            LibXray.resetDNS()
+            AndroidCoreBridgeProvider.instance().resetDns()
         } catch (e: Exception) {
             XLog.d("OneVpnService: stopTun resetDNS exception")
             XLog.d(e)
@@ -453,7 +457,7 @@ class OneVpnService : VpnService() {
     private fun configureDNS(tun: TunJson) {
         val dns = tun.tunDnsIPv4?.trim()
         require(!dns.isNullOrEmpty()) { "missing IPv4 TUN DNS" }
-        LibXray.setDNS(controller, "$dns:53")
+        AndroidCoreBridgeProvider.instance().setDns(controller, "$dns:53")
     }
 
     private fun setIPAndDns(tun: TunJson, builder: Builder) {
@@ -520,7 +524,7 @@ class OneVpnService : VpnService() {
     ) {
         scope.launch {
             try {
-                initController()
+                initController(applicationContext)
                 if (generation != startGeneration.get() || tunnel !== establishedTunnel) {
                     return@launch
                 }
@@ -535,7 +539,7 @@ class OneVpnService : VpnService() {
                     }
                     check(!isXrayRunning()) { "The previous Xray instance is still running" }
                     RuntimeLogFiles.clear(File(filesDir, "run"))
-                    LibXray.invoke(requestJson)
+                    AndroidCoreBridgeProvider.instance().invoke(requestJson)
                 }
                 validateRunXrayResult(result)
                 if (generation != startGeneration.get() || tunnel !== establishedTunnel) {
@@ -579,13 +583,19 @@ class OneVpnService : VpnService() {
     private fun stopXray() {
         synchronized(coreLifecycleLock) {
             val request = LibXrayInvokeRequest(method = LibXrayMethod.STOP_XRAY)
-            validateRunXrayResult(LibXray.invoke(JsonTool.json.encodeToString(request)))
+            validateRunXrayResult(
+                AndroidCoreBridgeProvider.instance().invoke(
+                    JsonTool.json.encodeToString(request),
+                ),
+            )
         }
     }
 
     private fun isXrayRunning(): Boolean {
         val request = LibXrayInvokeRequest(method = LibXrayMethod.GET_XRAY_STATE)
-        val result = LibXray.invoke(JsonTool.json.encodeToString(request))
+        val result = AndroidCoreBridgeProvider.instance().invoke(
+            JsonTool.json.encodeToString(request),
+        )
         validateRunXrayResult(result)
         return JsonTool.json.parseToJsonElement(result).jsonObject["data"]
             ?.jsonObject?.get("running")?.jsonPrimitive?.booleanOrNull
