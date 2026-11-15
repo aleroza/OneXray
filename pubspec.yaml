@@ -30,6 +30,7 @@ dependencies:
   #---------- dart.dev plugin
   # core
   path: ^1.9.1
+  archive: ^4.7.0
   collection: ^1.19.1
   crypto: ^3.0.8
   pub_semver: ^2.2.1
