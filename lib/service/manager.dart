@@ -19,6 +19,7 @@ import 'package:onexray/service/shared/menu/window/service.dart';
 import 'package:onexray/service/shared/notification/service.dart';
 import 'package:onexray/service/shared/ping/service.dart';
 import 'package:onexray/service/shared/share/service.dart';
+import 'package:onexray/service/shared/system_proxy/service.dart';
 import 'package:onexray/service/shared/apple_widget/service.dart';
 import 'package:onexray/service/advanced/tunnel/android/automation/service.dart';
 
@@ -72,6 +73,8 @@ abstract final class ServiceManager {
     await ConnectionCoordinator.instance.initialize(
       requestPermission: AppHostApi().requestPlatformPermission,
     );
+    // A killed previous run can leave our proxy applied with no listener.
+    await _runInit('SystemProxyCleanup', _clearStaleSystemProxy);
     // Recover only the admission marker after storage and runtime are ready.
     await AndroidAutomationService().setStartBlocked(false);
     await _runInit(
@@ -94,6 +97,18 @@ abstract final class ServiceManager {
     await _runInit('LocalApiService', LocalApiService.instance.start);
     PingService().startAutomatic();
     unawaited(_checkUpdate());
+  }
+
+  static Future<void> _clearStaleSystemProxy() async {
+    if (ConnectionCoordinator.instance.state.value.phase ==
+        ConnectionPhase.connected) {
+      return;
+    }
+    final policy = (await ConnectionCoordinator.instance.configuration).policy;
+    await SystemProxyService.instance.clearStaleProxy(
+      port: policy.socksPort,
+      intentEnabled: policy.systemProxyEnabled,
+    );
   }
 
   static Future<void> _checkUpdate() async {
@@ -127,6 +142,11 @@ abstract final class ServiceManager {
 
   static void serviceDispose() {
     unawaited(LocalApiService.instance.stop());
+    // Bounded by construction (cached directory resolution with a timeout,
+    // memory-remembered port with a disable fallback). If the process dies
+    // mid-restore, the snapshot stays on disk and the startup cleanup
+    // finishes the rollback, so quitting never waits on a platform channel.
+    unawaited(SystemProxyService.instance.remove());
     PingService().stopAutomatic();
     _initFuture = null;
     _initialized = false;

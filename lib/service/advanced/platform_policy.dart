@@ -112,6 +112,11 @@ final class PlatformPolicy {
   bool get keepConfigInbounds =>
       toJson()['inbound']['keepConfigInbounds'] as bool;
 
+  /// Stored intent to point the operating system proxy at the local SOCKS
+  /// port. Applied on a confirmed connection start and rolled back on stop.
+  bool get systemProxyEnabled =>
+      toJson()['systemProxy']['enabled'] as bool;
+
   static const tunIpv4Address = '198.18.0.1';
   static const tunIpv6Address = 'fc00::1';
   String get dnsIpv4Address => toJson()['dnsIpv4Address'] as String;
@@ -288,6 +293,7 @@ const _defaults = <String, dynamic>{
     'socksPort': 10808,
     'keepConfigInbounds': true,
   },
+  'systemProxy': {'enabled': false},
   'android': {
     'appScope': 'all',
     'includedAppPackageNames': <String>[],

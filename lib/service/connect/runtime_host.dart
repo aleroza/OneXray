@@ -15,6 +15,7 @@ import 'package:onexray/core/pigeon/host_api.dart';
 import 'package:onexray/core/pigeon/messages.g.dart';
 import 'package:onexray/core/pigeon/model.dart';
 import 'package:onexray/core/pigeon/model_writer.dart';
+import 'package:onexray/core/tools/logger.dart';
 import 'package:onexray/core/tools/platform.dart';
 import 'package:onexray/service/advanced/platform_policy.dart';
 import 'package:onexray/service/connect/runtime.dart';
@@ -69,6 +70,9 @@ class ConnectionRuntimeHost {
   final Future<NativeVpnCommandResult> Function(String, String)?
   _startPreparedVpn;
   final Future<int?> Function()? _connectedAtMilliseconds;
+  final Future<String?> Function(int port)? _applySystemProxy;
+  final Future<String?> Function()? _removeSystemProxy;
+  final Future<void> Function()? _revertSystemProxyIntent;
 
   ConnectionRuntimeHost({
     String? runDirectory,
@@ -81,6 +85,9 @@ class ConnectionRuntimeHost {
     AppleWidgetHostApi? appleWidgetApi,
     Future<NativeVpnCommandResult> Function(String, String)? startPreparedVpn,
     Future<int?> Function()? connectedAtMilliseconds,
+    Future<String?> Function(int port)? applySystemProxy,
+    Future<String?> Function()? removeSystemProxy,
+    Future<void> Function()? revertSystemProxyIntent,
   }) : _runDirectory = runDirectory,
        _readStatus = readStatus,
        _startVpn = startVpn,
@@ -89,6 +96,9 @@ class ConnectionRuntimeHost {
        _appleWidgetApi = appleWidgetApi ?? AppleWidgetHostApi(),
        _startPreparedVpn = startPreparedVpn,
        _connectedAtMilliseconds = connectedAtMilliseconds,
+       _applySystemProxy = applySystemProxy,
+       _removeSystemProxy = removeSystemProxy,
+       _revertSystemProxyIntent = revertSystemProxyIntent,
        _metrics = readMetrics;
 
   Future<String?> beginPreparation() async {
@@ -378,6 +388,22 @@ class ConnectionRuntimeHost {
     if (result.status != VpnStatus.connected) {
       throw ConnectionHostException('startNotConfirmed', cause: result.message);
     }
+    // A system proxy failure is a notification, never a connection failure.
+    // The service reports the reason as a value instead of throwing, so the
+    // stored intent is reverted here when the reason is not null.
+    final applySystemProxy = _applySystemProxy;
+    final policy = runtime.configuration.policy;
+    if (applySystemProxy != null && policy.systemProxyEnabled) {
+      try {
+        final reason = await applySystemProxy(policy.socksPort);
+        if (reason != null) {
+          ygLogger('Apply system proxy failed: $reason');
+          await _revertSystemProxyIntent?.call();
+        }
+      } catch (error, stackTrace) {
+        ygLogger('Apply system proxy failed: $error\n$stackTrace');
+      }
+    }
     return HostConnection(
       result.status!,
       runtime: runtime,
@@ -392,6 +418,17 @@ class ConnectionRuntimeHost {
     }
     if (result.status != VpnStatus.disconnected) {
       throw ConnectionHostException('stopNotConfirmed', cause: result.message);
+    }
+    final removeSystemProxy = _removeSystemProxy;
+    if (removeSystemProxy != null) {
+      try {
+        final reason = await removeSystemProxy();
+        if (reason != null) {
+          ygLogger('Restore system proxy failed: $reason');
+        }
+      } catch (error, stackTrace) {
+        ygLogger('Restore system proxy failed: $error\n$stackTrace');
+      }
     }
     return HostConnection(result.status!, permission: result.permission);
   }

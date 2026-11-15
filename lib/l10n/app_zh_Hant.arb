@@ -1033,5 +1033,14 @@
   "connectionSocksPortLabel": "SOCKS 連接埠",
   "connectionConfigInbounds": "設定中的入站",
   "connectionConfigInboundsDescription": "保留 Raw 或供應商完整設定中描述的入站。",
-  "connectionInboundPortInvalid": "請輸入 1024 到 65535 之間的連接埠。"
+  "connectionInboundPortInvalid": "請輸入 1024 到 65535 之間的連接埠。",
+  "connectionLocalPortMode": "開啟本機連接埠",
+  "connectionLocalPortModeDescription": "在迴環 SOCKS 連接埠監聽本機代理用戶端。",
+  "connectionSystemProxyMode": "系統代理",
+  "connectionSystemProxyModeDescription": "連線期間將作業系統代理指向該本機連接埠。",
+  "connectionInboundSummaryPort": "連接埠 {port}",
+  "@connectionInboundSummaryPort": {"placeholders": {"port": {"type": "int"}}},
+  "connectionInboundSummaryNone": "無託管入口",
+  "connectionSystemProxyFailure": "系統代理變更失敗：{reason}",
+  "@connectionSystemProxyFailure": {"placeholders": {"reason": {"type": "String"}}}
 }

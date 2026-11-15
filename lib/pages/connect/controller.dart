@@ -9,6 +9,7 @@ import 'package:onexray/core/db/database/database.dart';
 import 'package:onexray/core/db/database/enum.dart';
 import 'package:onexray/core/pigeon/host_api.dart';
 import 'package:onexray/core/pigeon/messages.g.dart';
+import 'package:onexray/core/tools/logger.dart';
 import 'package:onexray/l10n/localizations/app_localizations.dart';
 import 'package:onexray/pages/main/navigation.dart';
 import 'package:onexray/pages/shared/alert.dart';
@@ -29,6 +30,7 @@ import 'package:onexray/service/servers/catalog.dart';
 import 'package:onexray/service/servers/server.dart';
 import 'package:onexray/pages/servers/catalog.dart';
 import 'package:onexray/pages/shared/connection_action.dart';
+import 'package:onexray/service/shared/system_proxy/service.dart';
 
 const _unchanged = Object();
 
@@ -107,10 +109,16 @@ class ConnectController extends PageCubit<ConnectPageState> with ServerLabels {
     AppDatabase? database,
     ConnectionCoordinator? coordinator,
     Future<PlatformPermissionResult> Function()? requestPermission,
+    Future<String?> Function(int port)? applySystemProxy,
+    Future<String?> Function()? removeSystemProxy,
   }) : db = database ?? AppDatabase(),
        coordinator = coordinator ?? ConnectionCoordinator.instance,
        _requestPermission =
            requestPermission ?? AppHostApi().requestPlatformPermission,
+       _applySystemProxy =
+           applySystemProxy ?? SystemProxyService.instance.apply,
+       _removeSystemProxy =
+           removeSystemProxy ?? SystemProxyService.instance.remove,
        super(ConnectPageState()) {
     this.coordinator.state.addListener(_connectionChanged);
     _connectionChanged();
@@ -119,6 +127,8 @@ class ConnectController extends PageCubit<ConnectPageState> with ServerLabels {
   final AppDatabase db;
   final ConnectionCoordinator coordinator;
   final Future<PlatformPermissionResult> Function() _requestPermission;
+  final Future<String?> Function(int port) _applySystemProxy;
+  final Future<String?> Function() _removeSystemProxy;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   bool _pageVisible = false;
 
@@ -605,10 +615,13 @@ class ConnectController extends PageCubit<ConnectPageState> with ServerLabels {
 
   /// Saves the App-managed ingress switches. The mode changes the compiled
   /// configuration, so a connected session needs a confirmed restart.
+  /// Closing the local port also drops the system proxy intent: the OS proxy
+  /// would otherwise keep pointing at a port that no longer listens.
   Future<bool> changeInbound(
     BuildContext context,
     Map<String, dynamic> values, {
     String? label,
+    bool? systemProxyEnabled,
   }) async {
     if (connectionView.busy || pendingChange != null) return false;
     pendingChange = 'inbound';
@@ -620,6 +633,12 @@ class ConnectController extends PageCubit<ConnectPageState> with ServerLabels {
         policy['inbound'] as Map<String, dynamic>,
       )..addAll(values);
       policy['inbound'] = section;
+      if (systemProxyEnabled != null) {
+        policy['systemProxy'] = {
+          ...(policy['systemProxy'] as Map<String, dynamic>),
+          'enabled': systemProxyEnabled,
+        };
+      }
       final next = ConnectionConfiguration(
         connection: current.connection,
         policy: PlatformPolicy.fromJson(policy),
@@ -668,6 +687,122 @@ class ConnectController extends PageCubit<ConnectPageState> with ServerLabels {
   bool get socksEnabled => configuration.policy.socksEnabled;
   int get socksPort => configuration.policy.socksPort;
   bool get keepConfigInbounds => configuration.policy.keepConfigInbounds;
+  bool get systemProxyEnabled => configuration.policy.systemProxyEnabled;
+
+  /// Saves the system proxy intent. While disconnected the stored intent is
+  /// all that happens; a live connection applies or rolls the OS proxy back
+  /// immediately, unless enabling it first has to open the local port — that
+  /// changes the compiled configuration and uses the reconnect flow.
+  Future<bool> changeSystemProxyEnabled(
+    BuildContext context,
+    bool enabled,
+  ) async {
+    if (connectionView.busy || pendingChange != null) return false;
+    pendingChange = 'inbound';
+    try {
+      final current = await coordinator.configuration;
+      if (!context.mounted || !isPageActive) return false;
+      final policy = current.policy.toJson();
+      final next = ConnectionConfiguration(
+        connection: current.connection,
+        policy: PlatformPolicy.fromJson({
+          ...policy,
+          'systemProxy': {
+            ...(policy['systemProxy'] as Map<String, dynamic>),
+            'enabled': enabled,
+          },
+          if (enabled && !current.policy.socksEnabled)
+            'inbound': {
+              ...(policy['inbound'] as Map<String, dynamic>),
+              'socksEnabled': true,
+            },
+        }),
+      );
+      if (next.encode() == current.encode()) {
+        configuration = current;
+        return true;
+      }
+      final l = AppLocalizations.of(context)!;
+      final opensPort = enabled && !current.policy.socksEnabled;
+      final reconnect =
+          opensPort &&
+          coordinator.state.value.phase == ConnectionPhase.connected;
+      if (reconnect &&
+          !await showApplyAndReconnectDialog(
+            context,
+            label: l.connectionSystemProxyMode,
+          )) {
+        return false;
+      }
+      if (!context.mounted || !isPageActive) return false;
+      ConnectionConfiguration? saved;
+      await runConnectionAction(context, coordinator, () async {
+        await coordinator.apply(
+          next,
+          expectedConfiguration: current.encode(),
+          affectsRuntime: opensPort,
+          allowReconnect: reconnect,
+        );
+        saved = await coordinator.configuration;
+      });
+      final result = saved;
+      if (result == null) return false;
+      configuration = result;
+      // A reconnect already applied the proxy through the runtime host; a
+      // disconnected save only stores the intent for the next start.
+      if (opensPort ||
+          coordinator.state.value.phase != ConnectionPhase.connected) {
+        return true;
+      }
+      final failure = enabled
+          ? await _applySystemProxy(result.policy.socksPort)
+          : await _removeSystemProxy();
+      if (failure == null) return true;
+      if (enabled) {
+        // A rejected apply may have written part of the plan into the OS, so
+        // roll the OS values back before the stored intent goes back too.
+        await _removeSystemProxy();
+        final reverted = ConnectionConfiguration(
+          connection: result.connection,
+          policy: PlatformPolicy.fromJson({
+            ...result.policy.toJson(),
+            'systemProxy': {
+              ...(result.policy.toJson()['systemProxy'] as Map<String, dynamic>),
+              'enabled': false,
+            },
+          }),
+        );
+        // Not runConnectionAction: this rollback must also finish when the
+        // page is already gone, and it never needs the user's context.
+        try {
+          await coordinator.apply(
+            reverted,
+            expectedConfiguration: result.encode(),
+            affectsRuntime: false,
+          );
+          configuration = await coordinator.configuration;
+        } catch (error, stackTrace) {
+          ygLogger('Revert system proxy intent failed: $error\n$stackTrace');
+        }
+      }
+      if (context.mounted && isPageActive) {
+        ContextAlert.showToast(
+          context,
+          l.connectionSystemProxyFailure(failure),
+        );
+      }
+      return false;
+    } catch (error, stackTrace) {
+      if (context.mounted && isPageActive) {
+        await runConnectionAction(context, coordinator, () async {
+          Error.throwWithStackTrace(error, stackTrace);
+        });
+      }
+      return false;
+    } finally {
+      pendingChange = null;
+    }
+  }
 
   ConnectionSettings _ordinarySettings(ConnectionSettings settings) =>
       ConnectionSettings.fromJson({...settings.toJson(), 'expert': false});

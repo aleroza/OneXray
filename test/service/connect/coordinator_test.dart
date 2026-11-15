@@ -2010,6 +2010,42 @@ void main() {
       expect(stops, 2);
     },
   );
+
+  test('a disconnect observed from outside rolls the system proxy back',
+      () async {
+    var restores = 0;
+    final coordinator = await _initialize(
+      ConnectionCoordinator(
+        database: db,
+        readRuntime: () async => _runtime('a'),
+        inspect: (runtime, {observedStatus}) async => HostConnection(
+          observedStatus ?? VpnStatus.connected,
+          runtime: runtime,
+        ),
+        removeSystemProxy: () async {
+          restores++;
+          return null;
+        },
+      ),
+    );
+    // Put the App into a connected session that owns an applied proxy.
+    coordinator.state.value = ConnectionView(
+      phase: ConnectionPhase.connected,
+      runtime: _runtime('a'),
+    );
+
+    // The native side moved to disconnected without a stop command, e.g. the
+    // system VPN was revoked: the proxy must not keep pointing at a dead port.
+    await coordinator.refresh(observedStatus: VpnStatus.disconnected);
+    // Let the fire-and-forget restore queued by the publish finish.
+    for (var i = 0; i < 10 && restores == 0; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+
+    expect(coordinator.state.value.phase, ConnectionPhase.disconnected);
+    expect(restores, 1);
+  },
+);
 }
 
 Future<ConnectionCoordinator> _initialize(

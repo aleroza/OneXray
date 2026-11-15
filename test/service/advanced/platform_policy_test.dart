@@ -672,4 +672,23 @@ void main() {
     expect(policy.recordDns, false);
     expect(policy.maskAddress, '');
   });
+
+  test('the system proxy intent defaults to off and parses strictly', () {
+    expect(PlatformPolicy.defaults().systemProxyEnabled, isFalse);
+    // A database written before this setting simply merges the default.
+    expect(PlatformPolicy.fromJson({}).systemProxyEnabled, isFalse);
+
+    final enabled = PlatformPolicy.fromJson({
+      'systemProxy': {'enabled': true},
+    });
+    expect(enabled.systemProxyEnabled, isTrue);
+    expect(enabled.toJson()['systemProxy'], {'enabled': true});
+
+    expect(
+      () => PlatformPolicy.fromJson({
+        'systemProxy': {'enabled': true, 'proxyPort': 8080},
+      }),
+      throwsFormatException,
+    );
+  });
 }

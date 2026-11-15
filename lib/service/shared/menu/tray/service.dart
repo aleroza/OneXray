@@ -31,6 +31,7 @@ import 'package:onexray/service/shared/notification/service.dart';
 import 'package:collection/collection.dart';
 import 'package:onexray/core/tools/platform.dart';
 import 'package:onexray/service/shared/menu/window/service.dart';
+import 'package:onexray/service/shared/system_proxy/service.dart';
 
 final class TrayService {
   static final TrayService _singleton = TrayService._internal();
@@ -40,6 +41,7 @@ final class TrayService {
   TrayService._internal()
     : _databaseOverride = null,
       _coordinatorOverride = null,
+      _removeSystemProxyOverride = null,
       _platform = NativeTrayPlatform(),
       _connect = (() => ConnectionCoordinator.instance.connect()),
       _notify = ((message) => NotificationService().pushNotification(message)),
@@ -53,12 +55,15 @@ final class TrayService {
     AppDatabase? database,
     ConnectionCoordinator? coordinator,
     TrayPlatform? platform,
+    Future<String?> Function()? removeSystemProxy,
   }) : _databaseOverride = database,
        _coordinatorOverride = coordinator,
+       _removeSystemProxyOverride = removeSystemProxy,
        _platform = platform ?? NativeTrayPlatform();
 
   final AppDatabase? _databaseOverride;
   final ConnectionCoordinator? _coordinatorOverride;
+  final Future<String?> Function()? _removeSystemProxyOverride;
   final TrayPlatform _platform;
   AppDatabase get _db => _databaseOverride ?? AppDatabase();
   ConnectionCoordinator get _coordinator =>
@@ -82,6 +87,25 @@ final class TrayService {
   final Future<void> Function() _connect;
   final Future<void> Function(String) _notify;
   final Future<void> Function() _showMainWindow;
+
+  /// Best effort before exit: on macOS and Windows-MSIX Quit leaves the VPN
+  /// running, so only this call can take the applied proxy back. Bounded by
+  /// a timeout so a wedged platform can never block quitting; a leftover
+  /// snapshot is finished by the startup cleanup.
+  Future<void> _removeSystemProxy() async {
+    try {
+      final remove =
+          _removeSystemProxyOverride ?? SystemProxyService.instance.remove;
+      final reason = await remove().timeout(_quitProxyTimeout);
+      if (reason != null) ygLogger('Restore system proxy failed: $reason');
+    } on TimeoutException {
+      ygLogger('Restore system proxy timed out; startup cleanup will retry');
+    } catch (error) {
+      ygLogger('Restore system proxy failed: $error');
+    }
+  }
+
+  static const _quitProxyTimeout = Duration(seconds: 5);
 
   //==========================
   var _initialized = false;
@@ -328,12 +352,14 @@ final class TrayService {
           if (!_canQuitWithoutStoppingVpn) {
             await _coordinator.disconnect();
           }
+          await _removeSystemProxy();
           await ServicesBinding.instance.exitApplication(
             AppExitType.cancelable,
           );
           break;
         case _TrayMenuKey.quitAndStopVpn:
           await _coordinator.disconnect();
+          await _removeSystemProxy();
           await ServicesBinding.instance.exitApplication(
             AppExitType.cancelable,
           );

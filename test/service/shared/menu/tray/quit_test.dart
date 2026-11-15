@@ -71,6 +71,10 @@ void main() {
       connect: () async => fail('Quit must not start VPN'),
       notify: (_) async => fail('Quit must not send a connection notification'),
       showMainWindow: () async => actions.add('showWindow'),
+      removeSystemProxy: () async {
+        actions.add('removeProxy');
+        return null;
+      },
     );
   });
 
@@ -84,7 +88,7 @@ void main() {
       stopped.complete(const HostConnection(VpnStatus.disconnected));
       await quitting;
 
-      expect(actions, ['stop', 'stopped', 'exit']);
+      expect(actions, ['stop', 'stopped', 'removeProxy', 'exit']);
       expect(coordinator.state.value.phase, ConnectionPhase.disconnected);
     });
 
@@ -109,7 +113,10 @@ void main() {
         stopped.complete(const HostConnection(VpnStatus.disconnected));
         await retrying;
 
-        expect(actions, ['stop', 'showWindow', 'stop', 'stopped', 'exit']);
+        expect(
+          actions,
+          ['stop', 'showWindow', 'stop', 'stopped', 'removeProxy', 'exit'],
+        );
         expect(coordinator.state.value.phase, ConnectionPhase.disconnected);
         expect(coordinator.state.value.issue, isNull);
       },
@@ -120,7 +127,8 @@ void main() {
     test('plain Quit exits without stopping the independent VPN', () async {
       await select('quitApp');
 
-      expect(actions, ['exit']);
+      // Quitting without stopping the VPN still takes our proxy back.
+      expect(actions, ['removeProxy', 'exit']);
       expect(coordinator.state.value.phase, ConnectionPhase.connected);
     });
   }

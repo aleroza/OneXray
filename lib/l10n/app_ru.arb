@@ -1033,5 +1033,14 @@
   "connectionSocksPortLabel": "SOCKS-порт",
   "connectionConfigInbounds": "Инбаунды из конфига",
   "connectionConfigInboundsDescription": "Сохранять инбаунды, описанные в Raw или полном конфиге провайдера.",
-  "connectionInboundPortInvalid": "Введите порт от 1024 до 65535."
+  "connectionInboundPortInvalid": "Введите порт от 1024 до 65535.",
+  "connectionLocalPortMode": "Открыть локальный порт",
+  "connectionLocalPortModeDescription": "Принимает локальные клиентские подключения на loopback SOCKS-порт.",
+  "connectionSystemProxyMode": "Системный прокси",
+  "connectionSystemProxyModeDescription": "Пока соединение активно, направляет системный прокси ОС на локальный порт.",
+  "connectionInboundSummaryPort": "порт {port}",
+  "@connectionInboundSummaryPort": {"placeholders": {"port": {"type": "int"}}},
+  "connectionInboundSummaryNone": "Нет управляемого входа",
+  "connectionSystemProxyFailure": "Не удалось изменить системный прокси: {reason}",
+  "@connectionSystemProxyFailure": {"placeholders": {"reason": {"type": "String"}}}
 }

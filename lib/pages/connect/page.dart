@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:onexray/core/tools/platform.dart';
 import 'package:onexray/pages/shared/widgets/page_app_bar.dart';
 import 'package:onexray/service/connect/coordinator.dart';
 import 'package:onexray/service/connect/settings.dart';
@@ -110,23 +111,31 @@ class _ConnectPageState extends State<ConnectPage> {
                   tunEnabled: controller.tunEnabled,
                   socksEnabled: controller.socksEnabled,
                   socksPort: controller.socksPort,
+                  systemProxyEnabled: controller.systemProxyEnabled,
                   keepConfigInbounds: controller.keepConfigInbounds,
                   enabled:
                       !state.connectionView.busy && state.pendingChange == null,
+                  systemProxyVisible: AppPlatform.isDesktop,
+                  systemProxyLive:
+                      state.connectionView.phase ==
+                      ConnectionPhase.connected,
                   onTunChanged: (value) => controller.changeInbound(
                     context,
                     {'tunEnabled': value},
                     label: value
                         ? l.connectionTunMode
-                        : l.connectionSocksPortMode,
+                        : l.connectionLocalPortMode,
                   ),
                   onSocksChanged: (value) => controller.changeInbound(
                     context,
                     {'socksEnabled': value},
+                    systemProxyEnabled: value ? null : false,
                     label: value
-                        ? l.connectionSocksPortMode
+                        ? l.connectionLocalPortMode
                         : l.connectionTunMode,
                   ),
+                  onSystemProxyChanged: (value) =>
+                      controller.changeSystemProxyEnabled(context, value),
                   onKeepConfigInboundsChanged: (value) =>
                       controller.changeInbound(context, {
                         'keepConfigInbounds': value,

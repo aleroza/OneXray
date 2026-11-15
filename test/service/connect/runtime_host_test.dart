@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onexray/core/pigeon/messages.g.dart';
 import 'package:onexray/core/pigeon/model.dart';
+import 'package:onexray/service/advanced/platform_policy.dart';
 import 'package:onexray/service/connect/compiler.dart';
 import 'package:onexray/service/connect/runtime.dart';
 import 'package:onexray/service/connect/runtime_host.dart';
@@ -631,6 +632,132 @@ void main() {
       );
     },
   );
+
+  group('system proxy lifecycle', () {
+    final proxyPolicy = PlatformPolicy.fromJson({
+      'systemProxy': {'enabled': true},
+    });
+
+    Future<void> confirmStart(ConnectionRuntimeHost host, ConnectionRuntime runtime) async {
+      final result = await host.start(runtime);
+      expect(result.connected, isTrue);
+    }
+
+    test('a confirmed start applies the intended proxy on its SOCKS port',
+        () async {
+      final events = <String>[];
+      final host = ConnectionRuntimeHost(
+        startVpn: (_) async => NativeVpnCommandResult(
+          state: NativeVpnCommandState.success,
+          status: VpnStatus.connected,
+        ),
+        stopVpn: () async => NativeVpnCommandResult(
+          state: NativeVpnCommandState.success,
+          status: VpnStatus.disconnected,
+        ),
+        applySystemProxy: (port) async {
+          events.add('apply $port');
+          return null;
+        },
+        removeSystemProxy: () async {
+          events.add('remove');
+          return null;
+        },
+      );
+
+      await confirmStart(host, _runtime(policy: proxyPolicy));
+      await host.stop();
+
+      expect(events, ['apply 10808', 'remove']);
+    });
+
+    test('without the stored intent neither hook runs', () async {
+      final events = <String>[];
+      final host = ConnectionRuntimeHost(
+        startVpn: (_) async => NativeVpnCommandResult(
+          state: NativeVpnCommandState.success,
+          status: VpnStatus.connected,
+        ),
+        stopVpn: () async => NativeVpnCommandResult(
+          state: NativeVpnCommandState.success,
+          status: VpnStatus.disconnected,
+        ),
+        applySystemProxy: (port) async {
+          events.add('apply $port');
+          return null;
+        },
+        removeSystemProxy: () async {
+          events.add('remove');
+          return null;
+        },
+      );
+
+      await confirmStart(host, _runtime());
+      await host.stop();
+
+      expect(events, ['remove']);
+    });
+
+    test('an unconfirmed start applies nothing and an unconfirmed stop', () async {
+      final events = <String>[];
+      final host = ConnectionRuntimeHost(
+        startVpn: (_) async =>
+            NativeVpnCommandResult(state: NativeVpnCommandState.success),
+        stopVpn: () async =>
+            NativeVpnCommandResult(state: NativeVpnCommandState.success),
+        applySystemProxy: (port) async {
+          events.add('apply $port');
+          return null;
+        },
+        removeSystemProxy: () async {
+          events.add('remove');
+          return null;
+        },
+      );
+
+      await expectLater(host.start(_runtime(policy: proxyPolicy)), throwsA(isA<ConnectionHostException>()));
+      await expectLater(host.stop(), throwsA(isA<ConnectionHostException>()));
+
+      expect(events, isEmpty);
+    });
+
+    test('a failing proxy hook never fails the connection', () async {
+      final host = ConnectionRuntimeHost(
+        startVpn: (_) async => NativeVpnCommandResult(
+          state: NativeVpnCommandState.success,
+          status: VpnStatus.connected,
+        ),
+        stopVpn: () async => NativeVpnCommandResult(
+          state: NativeVpnCommandState.success,
+          status: VpnStatus.disconnected,
+        ),
+        applySystemProxy: (_) async => throw StateError('gsettings missing'),
+        removeSystemProxy: () async => throw StateError('registry locked'),
+      );
+
+      await confirmStart(host, _runtime(policy: proxyPolicy));
+      final stopped = await host.stop();
+
+      expect(stopped.status, VpnStatus.disconnected);
+    });
+
+    test('a reported apply reason reverts the stored intent', () async {
+      final events = <String>[];
+      final host = ConnectionRuntimeHost(
+        startVpn: (_) async => NativeVpnCommandResult(
+          state: NativeVpnCommandState.success,
+          status: VpnStatus.connected,
+        ),
+        applySystemProxy: (_) async => 'gsettings refused',
+        revertSystemProxyIntent: () async => events.add('revert'),
+      );
+
+      // The connection stays connected; only the stored intent is rolled back.
+      await confirmStart(host, _runtime(policy: proxyPolicy));
+
+      expect(events, ['revert']);
+    });
+  });
 }
 
 ConnectionRuntime _runtime({
@@ -638,8 +765,11 @@ ConnectionRuntime _runtime({
   List<ResolvedServer>? entries,
   String xrayJson = '{"outbounds":[]}',
   ConnectionPlatform platform = ConnectionPlatform.android,
+  PlatformPolicy? policy,
 }) {
-  final configuration = ConnectionConfiguration();
+  final configuration = ConnectionConfiguration(
+    policy: policy ?? PlatformPolicy.defaults(),
+  );
   final server = ResolvedServer(
     id: 1,
     sourceId: 7,

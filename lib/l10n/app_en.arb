@@ -3010,5 +3010,14 @@
   "connectionSocksPortLabel": "SOCKS port",
   "connectionConfigInbounds": "Configuration inbounds",
   "connectionConfigInboundsDescription": "Keep the inbounds described by a Raw or provider configuration.",
-  "connectionInboundPortInvalid": "Enter a port between 1024 and 65535."
+  "connectionInboundPortInvalid": "Enter a port between 1024 and 65535.",
+  "connectionLocalPortMode": "Open a local port",
+  "connectionLocalPortModeDescription": "Listen for local proxy clients on a loopback SOCKS port.",
+  "connectionSystemProxyMode": "System proxy",
+  "connectionSystemProxyModeDescription": "While connected, point the operating system proxy at the local port.",
+  "connectionInboundSummaryPort": "port {port}",
+  "@connectionInboundSummaryPort": {"placeholders": {"port": {"type": "int"}}},
+  "connectionInboundSummaryNone": "No managed ingress",
+  "connectionSystemProxyFailure": "System proxy change failed: {reason}",
+  "@connectionSystemProxyFailure": {"placeholders": {"reason": {"type": "String"}}}
 }

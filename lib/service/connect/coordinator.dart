@@ -6,6 +6,8 @@ import 'package:onexray/core/db/database/database.dart';
 import 'package:onexray/core/pigeon/flutter_api.dart';
 import 'package:onexray/core/pigeon/host_api.dart';
 import 'package:onexray/core/pigeon/messages.g.dart';
+import 'package:onexray/core/tools/logger.dart';
+import 'package:onexray/service/advanced/platform_policy.dart';
 import 'package:onexray/service/connect/failure.dart';
 import 'package:onexray/service/connect/ordinary_plan.dart';
 export 'package:onexray/service/connect/ordinary_plan.dart'
@@ -20,6 +22,7 @@ import 'package:onexray/service/servers/subscription/service.dart';
 import 'package:onexray/service/shared/app_lifecycle.dart';
 import 'package:onexray/service/shared/command_serial_executor.dart';
 import 'package:onexray/service/shared/share/configuration_transfer.dart';
+import 'package:onexray/service/shared/system_proxy/service.dart';
 
 enum ConnectionPhase {
   disconnected,
@@ -98,6 +101,7 @@ class ConnectionCoordinator with WidgetsBindingObserver {
   late final Future<ConnectionRuntime?> Function() _readRuntime;
   final Stream<VpnStatus> _statusEvents;
   final Future<void> Function() _observeStatus;
+  final Future<String?> Function() _removeProxy;
   final void Function() _disposeStatus;
   final _commands = CommandSerialExecutor();
   final state = ValueNotifier(const ConnectionView());
@@ -137,12 +141,18 @@ class ConnectionCoordinator with WidgetsBindingObserver {
     void Function()? disposeStatus,
     Future<String?> Function()? beginPreparation,
     Future<void> Function(String)? finishPreparation,
+    Future<String?> Function()? removeSystemProxy,
   }) : db = database ?? AppDatabase(),
        _statusEvents =
            statusEvents ?? AppFlutterApi().vpnStatusController.stream,
        _observeStatus = observeStatus ?? AppHostApi().observeVpnStatus,
-       _disposeStatus = disposeStatus ?? AppHostApi().disposeVpnStatus {
-    final host = ConnectionRuntimeHost();
+       _disposeStatus = disposeStatus ?? AppHostApi().disposeVpnStatus,
+       _removeProxy = removeSystemProxy ?? SystemProxyService.instance.remove {
+    final host = ConnectionRuntimeHost(
+      applySystemProxy: SystemProxyService.instance.apply,
+      removeSystemProxy: _removeProxy,
+      revertSystemProxyIntent: _revertSystemProxyIntent,
+    );
     _beginPreparation =
         beginPreparation ??
         (start == null ? host.beginPreparation : () async => null);
@@ -339,6 +349,52 @@ class ConnectionCoordinator with WidgetsBindingObserver {
     if (status == null) return;
     _pendingStatus = null;
     unawaited(refresh(observedStatus: status));
+  }
+
+  /// Restores the applied system proxy after the native state left
+  /// connected without our stop command (revoked system VPN, crashed core).
+  /// An unremoved proxy would keep pointing the whole system at a dead port.
+  Future<void> _restoreSystemProxy() async {
+    try {
+      final reason = await _removeProxy();
+      if (reason != null) ygLogger('Restore system proxy failed: $reason');
+    } catch (error) {
+      ygLogger('Restore system proxy failed: $error');
+    }
+  }
+
+  /// An apply rejected by the OS at connect time must not keep the stored
+  /// intent on. This runs inside the still-active connect command, so the
+  /// rollback (OS restore first, then policy write-back) is queued behind it
+  /// rather than awaited here — awaiting would deadlock the command queue.
+  Future<void> _revertSystemProxyIntent() async {
+    unawaited(() async {
+      try {
+        final rollback = await _removeProxy();
+        if (rollback != null) {
+          ygLogger('System proxy rollback failed: $rollback');
+        }
+        final current = await configuration;
+        if (!current.policy.systemProxyEnabled) return;
+        final policy = current.policy.toJson();
+        await apply(
+          ConnectionConfiguration(
+            connection: current.connection,
+            policy: PlatformPolicy.fromJson({
+              ...policy,
+              'systemProxy': {
+                ...(policy['systemProxy'] as Map<String, dynamic>),
+                'enabled': false,
+              },
+            }),
+          ),
+          expectedConfiguration: current.encode(),
+          affectsRuntime: false,
+        );
+      } catch (error) {
+        ygLogger('Revert system proxy intent failed: $error');
+      }
+    }());
   }
 
   void _onStatusError(Object error) {
@@ -838,6 +894,12 @@ class ConnectionCoordinator with WidgetsBindingObserver {
     bool liveTraffic = false,
   }) {
     final old = state.value;
+    if (old.phase == ConnectionPhase.connected && !current.connected) {
+      // The native state left connected — by our stop or from the outside
+      // (revoked system VPN, crashed core). Either way the applied system
+      // proxy must go back; a repeated restore is a cheap no-op.
+      unawaited(_restoreSystemProxy());
+    }
     final checkedPermission = current.permission;
     final permissionRequired = _permissionRequired(checkedPermission);
     if (permissionRequired) {

@@ -1033,5 +1033,14 @@
   "connectionSocksPortLabel": "درگاه SOCKS",
   "connectionConfigInbounds": "ورودی‌های پیکربندی",
   "connectionConfigInboundsDescription": "ورودی‌های توصیف‌شده در پیکربندی Raw یا ارائه‌دهنده را نگه می‌دارد.",
-  "connectionInboundPortInvalid": "درگاهی بین 1024 و 65535 وارد کنید."
+  "connectionInboundPortInvalid": "درگاهی بین 1024 و 65535 وارد کنید.",
+  "connectionLocalPortMode": "باز کردن درگاه محلی",
+  "connectionLocalPortModeDescription": "روی یک درگاه SOCKS حلقوی برای کلاینت‌های پراکسی محلی گوش می‌دهد.",
+  "connectionSystemProxyMode": "پراکسی سیستم",
+  "connectionSystemProxyModeDescription": "در زمان اتصال، پراکسی سیستم‌عامل را روی همین درگاه محلی تنظیم می‌کند.",
+  "connectionInboundSummaryPort": "درگاه {port}",
+  "@connectionInboundSummaryPort": {"placeholders": {"port": {"type": "int"}}},
+  "connectionInboundSummaryNone": "هیچ ورودی مدیریت‌شده‌ای وجود ندارد",
+  "connectionSystemProxyFailure": "تغییر پراکسی سیستم ناموفق بود: {reason}",
+  "@connectionSystemProxyFailure": {"placeholders": {"reason": {"type": "String"}}}
 }
