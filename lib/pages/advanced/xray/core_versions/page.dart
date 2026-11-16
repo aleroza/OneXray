@@ -1,6 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:onexray/core/model/core_library_compatibility.dart';
 import 'package:onexray/core/model/core_release.dart';
+import 'package:onexray/core/tools/core_platform.dart';
 import 'package:onexray/l10n/localizations/app_localizations.dart';
 import 'package:onexray/pages/advanced/xray/core_versions/controller.dart';
 import 'package:onexray/pages/connect/dialogs.dart';
@@ -148,6 +150,11 @@ class CoreVersionsPage extends StatelessWidget {
             icon: const Icon(LucideIcons.triangleAlert, size: 19),
             description: Text(l.coreVersionsSelectedUnavailable),
           ),
+        if (state.capability.platform == CorePlatform.android)
+          ShadAlert(
+            icon: const Icon(LucideIcons.info, size: 19),
+            description: Text(l.coreVersionsRestartRequired),
+          ),
         SettingSection(
           title: l.coreVersionsInstalledSection,
           icon: LucideIcons.download,
@@ -190,6 +197,9 @@ class CoreVersionsPage extends StatelessWidget {
       titleTextDirection: TextDirection.ltr,
       subtitle: unavailable
           ? l.coreVersionsSelectedUnavailable
+          : entry.manifest.compatibility ==
+                CoreLibraryCompatibility.warning.name
+          ? l.coreVersionsCompatibilityWarning
           : entry.manifest.installedSha256 == null
           ? null
           : l.coreVersionsVerified,

@@ -1061,5 +1061,13 @@
   "coreVersionsVersionApplied": "新连接将使用所选内核版本。",
   "coreVersionsSelectedUnavailable": "所选版本不可用；正在使用内置版本。",
   "coreVersionsDisconnectError": "切换前无法停止连接。",
-  "coreVersionsDeleteActiveError": "无法删除当前使用的内核版本。"
+  "coreVersionsDeleteActiveError": "无法删除当前使用的内核版本。",
+  "coreVersionsRestartRequired": "所选内核版本将在应用重启后加载。",
+  "@coreVersionsRestartRequired": {
+    "description": "所选内核版本将在应用重启后加载。"
+  },
+  "coreVersionsCompatibilityWarning": "该库未导出应用所需的全部入口点，可能无法启动。",
+  "@coreVersionsCompatibilityWarning": {
+    "description": "该库未导出应用所需的全部入口点，可能无法启动。"
+  }
 }

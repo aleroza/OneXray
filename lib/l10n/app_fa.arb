@@ -1061,5 +1061,13 @@
   "coreVersionsVersionApplied": "نسخهٔ انتخابی هسته برای اتصال‌های جدید استفاده می‌شود.",
   "coreVersionsSelectedUnavailable": "نسخهٔ انتخابی در دسترس نیست؛ نسخهٔ همراه برنامه استفاده می‌شود.",
   "coreVersionsDisconnectError": "قبل از تغییر، اتصال متوقف نشد.",
-  "coreVersionsDeleteActiveError": "نسخهٔ فعال هسته را نمی‌توان حذف کرد."
+  "coreVersionsDeleteActiveError": "نسخهٔ فعال هسته را نمی‌توان حذف کرد.",
+  "coreVersionsRestartRequired": "نسخه هسته انتخاب‌شده پس از راه‌اندازی دوباره برنامه بارگذاری می‌شود.",
+  "@coreVersionsRestartRequired": {
+    "description": "نسخه هسته انتخاب‌شده پس از راه‌اندازی دوباره برنامه بارگذاری می‌شود."
+  },
+  "coreVersionsCompatibilityWarning": "این کتابخانه همه نقاط ورودی مورد نیاز برنامه را صادر نمی‌کند و ممکن است اجرا نشود.",
+  "@coreVersionsCompatibilityWarning": {
+    "description": "این کتابخانه همه نقاط ورودی مورد نیاز برنامه را صادر نمی‌کند و ممکن است اجرا نشود."
+  }
 }

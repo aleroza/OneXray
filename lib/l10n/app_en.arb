@@ -3038,5 +3038,13 @@
   "coreVersionsVersionApplied": "The selected core version will be used for new connections.",
   "coreVersionsSelectedUnavailable": "The selected version is unavailable; the bundled core is used.",
   "coreVersionsDisconnectError": "The connection could not be stopped before switching.",
-  "coreVersionsDeleteActiveError": "The active core version cannot be deleted."
+  "coreVersionsDeleteActiveError": "The active core version cannot be deleted.",
+  "coreVersionsRestartRequired": "The selected core version is loaded after the app restarts.",
+  "@coreVersionsRestartRequired": {
+    "description": "The selected core version is loaded after the app restarts."
+  },
+  "coreVersionsCompatibilityWarning": "This library does not export every entry point the app needs; it may fail to start.",
+  "@coreVersionsCompatibilityWarning": {
+    "description": "This library does not export every entry point the app needs; it may fail to start."
+  }
 }

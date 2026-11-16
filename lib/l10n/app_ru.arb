@@ -1061,5 +1061,13 @@
   "coreVersionsVersionApplied": "Выбранная версия ядра будет использоваться для новых соединений.",
   "coreVersionsSelectedUnavailable": "Выбранная версия недоступна; используется встроенная.",
   "coreVersionsDisconnectError": "Не удалось отключить соединение перед переключением.",
-  "coreVersionsDeleteActiveError": "Нельзя удалить активную версию ядра."
+  "coreVersionsDeleteActiveError": "Нельзя удалить активную версию ядра.",
+  "coreVersionsRestartRequired": "Выбранная версия ядра загрузится после перезапуска приложения.",
+  "@coreVersionsRestartRequired": {
+    "description": "Выбранная версия ядра загрузится после перезапуска приложения."
+  },
+  "coreVersionsCompatibilityWarning": "Библиотека экспортирует не все нужные приложению точки входа и может не запуститься.",
+  "@coreVersionsCompatibilityWarning": {
+    "description": "Библиотека экспортирует не все нужные приложению точки входа и может не запуститься."
+  }
 }

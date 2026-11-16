@@ -139,4 +139,3 @@ Uint8List buildElf({
   }
   return bytes;
 }
-
